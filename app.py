@@ -19,12 +19,12 @@ def check_hashes(password, hashed_text):
     return make_hashes(password) == hashed_text
 
 
-# Cədvəllərin Yaranması və Sabit Admin Hesabının Əlavə Edilməsi
+# Cədvəllərin Yaranması və Stukturun Yenilənməsi
 try:
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # İstifadəçilər Cədvəli
+    # 1. İstifadəçilər Cədvəli
     cur.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -38,7 +38,7 @@ try:
     );
     """)
 
-    # Dərslər Cədvəli
+    # 2. Dərslər Cədvəli
     cur.execute("""
     CREATE TABLE IF NOT EXISTS lessons (
         id SERIAL PRIMARY KEY,
@@ -49,7 +49,12 @@ try:
     );
     """)
 
-    # Quizlər Cədvəli
+    # --- ƏGƏR CONTENT SÜTUNU YOXDURSA AVTOMATİK ƏLAVƏ ET (FIX) ---
+    cur.execute("""
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS content TEXT;
+    """)
+
+    # 3. Quizlər Cədvəli
     cur.execute("""
     CREATE TABLE IF NOT EXISTS quizzes (
         id SERIAL PRIMARY KEY,
@@ -144,7 +149,7 @@ if not st.session_state["logged_in"]:
         reg_fullname = st.text_input("Ad və Soyadınız:", placeholder="Məs: Əli Əliyev", key="reg_fn")
         reg_username = st.text_input("İstifadəçi Adı seçin (Username):", placeholder="Məs: ali_aliyev", key="reg_un")
         reg_password = st.text_input("Şifrə təyin edin:", type="password", key="reg_pw")
-        reg_class = st.selectbox("Sinfinizi seçin:", list(range(1, 12)), index=4, key="reg_cl")
+        reg_class = st.selectbox("Sinfinizi seçin:", list(range(1, 12)), index=8, key="reg_cl")  # Standart 9-cu sinif
         reg_code = st.text_input("Müəllimin verdiyi 3 rəqəmli Şagird Kodu:", max_chars=3, placeholder="Məs: 101",
                                  key="reg_cd")
 
@@ -173,7 +178,7 @@ if not st.session_state["logged_in"]:
                             conn.close()
                             st.stop()
 
-                        # 3. BAZAYA BİRBAŞA YAZMA (Rol: 'student')
+                        # 3. BAZAYA YAZMA
                         hashed_pw = make_hashes(reg_password)
                         cur.execute(
                             "INSERT INTO users (full_name, username, password, role, student_code, class_level) VALUES (%s, %s, %s, %s, %s, %s)",
@@ -249,7 +254,7 @@ else:
             st.subheader("📚 Bazaya Yeni Dərs Əlavə Et")
             with st.form("add_lesson_form"):
                 lesson_title = st.text_input("Dərsin Adı / Mövzu:")
-                target_class = st.selectbox("Hansi sinif üçün?", list(range(1, 12)), index=4)
+                target_class = st.selectbox("Hansi sinif üçün?", list(range(1, 12)), index=8)
                 lesson_content = st.text_area("Dərs haqqında mətn:")
 
                 submit_lesson = st.form_submit_button("Dərsi Bazaya Əlavə Et")
