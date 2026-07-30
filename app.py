@@ -18,7 +18,7 @@ def check_hashes(password, hashed_text):
     return make_hashes(password) == hashed_text
 
 
-# Cədvəllərin Yaranması və Yeni Sütunların Avtomatik Əlavə Edilməsi
+# Cədvəllərin Yaranması və Stukturun Yenilənməsi
 try:
     conn = get_db_connection()
     cur = conn.cursor()
@@ -52,7 +52,7 @@ try:
     );
     """)
 
-    # --- Əgər köhnə bazada bu sütunlar yoxdursa avtomatik əlavə et ---
+    # Sütunları avtomatik yoxlayıb əlavə etmək
     cur.execute("ALTER TABLE lessons ADD COLUMN IF NOT EXISTS content TEXT;")
     cur.execute("ALTER TABLE lessons ADD COLUMN IF NOT EXISTS main_standard VARCHAR(255);")
     cur.execute("ALTER TABLE lessons ADD COLUMN IF NOT EXISTS sub_standard VARCHAR(255);")
@@ -110,7 +110,6 @@ if not st.session_state["logged_in"]:
 
     auth_tab1, auth_tab2 = st.tabs(["🔑 Sistemə Giriş (Login)", "📝 Yeni Qeydiyyat (Register)"])
 
-    # TAB 1: GİRİŞ ET
     with auth_tab1:
         st.subheader("Mövcud hesabınızla daxil olun")
         username_input = st.text_input("İstifadəçi adı (Username):", key="login_user")
@@ -147,7 +146,6 @@ if not st.session_state["logged_in"]:
             else:
                 st.warning("Zəhmət olmasa istifadəçi adı və şifrəni yazın.")
 
-    # TAB 2: YENİ QEYDİYYAT
     with auth_tab2:
         st.subheader("Yeni Şagird Hesabı Yaradın")
 
@@ -227,7 +225,6 @@ else:
             "❓ İmtahan Sualı Yarat"
         ])
 
-        # TAB 1: Şagird Siyahısı
         with m_tab1:
             st.subheader("🎓 Qeydiyyatdan Keçmiş Şagirdlər Siyahısı")
             try:
@@ -250,28 +247,26 @@ else:
             except Exception as ex:
                 st.error(f"Şagird siyahısı yüklənərkən xəta: {ex}")
 
-        # TAB 2: Yeni Dərs Əlavə Et (STANDARTLAR VƏ LİNKLƏR BƏRPA OLUNDU)
         with m_tab2:
             st.subheader("📚 Bazaya Yeni Dərs Əlavə Et")
             with st.form("add_lesson_form"):
-                lesson_title = st.text_input("Dərsin Adı / Mövzu:", placeholder="Məs: İnformasiyanın Kodlaşdırılması")
+                lesson_title = st.text_input("Dərsin Adı / Mövzu:", placeholder="Məs: Python proqramlaşdırma dili")
                 target_class = st.selectbox("Hansi sinif üçün?", list(range(1, 12)), index=8)
 
                 col_st1, col_st2 = st.columns(2)
                 with col_st1:
-                    main_std = st.text_input("Məzmun Standartı:", placeholder="Məs: 1.2. İnformasiya prosesləri")
+                    main_std = st.text_input("Məzmun Standartı:", placeholder="Məs: Python")
                 with col_st2:
-                    sub_std = st.text_input("Alt Standart:", placeholder="Məs: 1.2.1. Ədəd sistemlərini fərqləndirir")
+                    sub_std = st.text_input("Alt Standart:", placeholder="Məs: Python nədir")
 
                 lesson_content = st.text_area("Dərs haqqında mətni / İzahı daxil edin:")
 
                 col_lnk1, col_lnk2 = st.columns(2)
                 with col_lnk1:
-                    f_url = st.text_input("Dərs üçün PDF / Fayl Linki:",
-                                          placeholder="https://drive.google.com/file/d/...")
+                    f_url = st.text_input("Dərs üçün PDF / Fayl Linki:", placeholder="https://drive.google.com/...")
                 with col_lnk2:
                     v_url = st.text_input("Dərs üçün Video Linki (YouTube):",
-                                          placeholder="https://youtube.com/watch?v=...")
+                                          placeholder="https://www.youtube.com/watch?v=...")
 
                 submit_lesson = st.form_submit_button("Dərsi Bazaya Əlavə Et")
                 if submit_lesson:
@@ -294,14 +289,12 @@ else:
                             conn.commit()
                             cur.close()
                             conn.close()
-                            st.success(
-                                f"'{lesson_title}' dərsi bütün standartlar və resurslarla {target_class}-ci sinfə əlavə edildi!")
+                            st.success(f"'{lesson_title}' dərsi uğurla bazaya əlavə edildi!")
                         except Exception as ex:
                             st.error(f"Dərs əlavə edilərkən xəta: {ex}")
                     else:
                         st.warning("Lütfən dərsin adını daxil edin.")
 
-        # TAB 3: Quiz Yarat
         with m_tab3:
             st.subheader("❓ Dərslərə Uyğun İmtahan Sualı Yarat")
             try:
@@ -349,7 +342,7 @@ else:
                 st.error(f"Dərslər yüklənərkən xəta: {ex}")
 
     # ------------------------------------------
-    # B) ŞAGİRD USER PANELİ (Bütün Standartlar və Linklər Görünür)
+    # B) ŞAGİRD USER PANELİ (LİNK VƏ VİDEOLAR YENİLƏNDİ)
     # ------------------------------------------
     else:
         st.title(f"📖 Şagird İmtahan Portalı ({st.session_state['class_level']}-ci Sinif)")
@@ -359,7 +352,7 @@ else:
             cur = conn.cursor()
             cur.execute("""
                 SELECT id, title, content, main_standard, sub_standard, file_url, video_url 
-                FROM lessons WHERE class_level = %s
+                FROM lessons WHERE class_level = %s ORDER BY id DESC
             """, (st.session_state['class_level'],))
             available_lessons = cur.fetchall()
             cur.close()
@@ -380,25 +373,42 @@ else:
 
                         # Standartlar Bölməsi
                         if lmain_std or lsub_std:
-                            st.markdown(f"📌 **Məzmun Standartı:** {lmain_std if lmain_std else 'Təyin edilməyib'}")
-                            st.markdown(f"🎯 **Alt Standart:** {lsub_std if lsub_std else 'Təyin edilməyib'}")
-                            st.write("---")
+                            if lmain_std:
+                                st.markdown(f"📌 **Məzmun Standartı:** {lmain_std}")
+                            if lsub_std:
+                                st.markdown(f"🎯 **Alt Standart:** {lsub_std}")
 
                         # Dərs Mətni
-                        if lcontent:
+                        if lcontent and lcontent.strip():
+                            st.write("---")
                             st.markdown(lcontent)
 
-                        # Resurslar Və Linklər
-                        if lfile_url or lvideo_url:
+                        # --- RESURSLAR VƏ LİNK DÜYMƏLƏRİ (DÜZƏLDİLDİ) ---
+                        file_clean = lfile_url.strip() if lfile_url else ""
+                        video_clean = lvideo_url.strip() if lvideo_url else ""
+
+                        if file_clean or video_clean:
                             st.write("---")
                             st.subheader("📎 Dərs Resursları Və Materiallar")
-                            col_res1, col_res2 = st.columns(2)
-                            with col_res1:
-                                if lfile_url:
-                                    st.markdown(f"📄 [Dərs Materialını / PDF Yüklə]({lfile_url})")
-                            with col_res2:
-                                if lvideo_url:
-                                    st.markdown(f"🎥 [Video İzaha Bax]({lvideo_url})")
+
+                            col_btn1, col_btn2 = st.columns(2)
+
+                            with col_btn1:
+                                if file_clean:
+                                    st.link_button("📄 PDF / Dərs Materialını Aç", file_clean, use_container_width=True)
+
+                            with col_btn2:
+                                if video_clean:
+                                    st.link_button("🔗 Video İzahı Yeni Pəncərədə Aç", video_clean,
+                                                   use_container_width=True)
+
+                            # Əgər YouTube videosudursa, səhifənin daxilində də pleyer göstər
+                            if video_clean and ("youtube.com" in video_clean or "youtu.be" in video_clean):
+                                st.write("**🎥 Video İzah:**")
+                                try:
+                                    st.video(video_clean)
+                                except Exception:
+                                    pass
 
                 # İmtahan sualları
                 conn = get_db_connection()
