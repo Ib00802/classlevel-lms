@@ -74,6 +74,12 @@ try:
     );
     """)
 
+    # Əgər quizzes cədvəlində quiz_title varsa, onun NOT NULL məhdudiyyətini ləğv et
+    try:
+        cur.execute("ALTER TABLE quizzes ALTER COLUMN quiz_title DROP NOT NULL;")
+    except Exception:
+        pass
+
     # Sabit Admin Hesabı (Username: admin, Pass: Muellim2026)
     admin_user = "admin"
     admin_pass = make_hashes("Muellim2026")
@@ -195,8 +201,6 @@ if not st.session_state["logged_in"]:
                         st.error(f"Qeydiyyat xətası: {ex}")
             else:
                 st.warning("Lütfən bütün xanaları doldurun.")
-
-
 # ==========================================
 # MƏRHƏLƏ 2: DAXİL OLDUQDAN SONRAKİ PANELLƏR
 # ==========================================
@@ -300,7 +304,7 @@ else:
             try:
                 conn = get_db_connection()
                 cur = conn.cursor()
-                cur.execute("SELECT id, title, class_level FROM lessons")
+                cur.execute("SELECT id, title, class_level FROM lessons ORDER BY id DESC")
                 all_lessons = cur.fetchall()
                 cur.close()
                 conn.close()
@@ -324,14 +328,32 @@ else:
                                 try:
                                     conn = get_db_connection()
                                     cur = conn.cursor()
+
                                     cur.execute("""
-                                        INSERT INTO quizzes (lesson_id, question_text, option_a, option_b, option_c, option_d, correct_option)
-                                        VALUES (%s, %s, %s, %s, %s, %s, %s)
-                                    """, (q_lesson_id, q_text, op_a, op_b, op_c, op_d, correct_op))
+                                        SELECT column_name FROM information_schema.columns 
+                                        WHERE table_name='quizzes' AND column_name='quiz_title';
+                                    """)
+                                    has_quiz_title = cur.fetchone()
+
+                                    selected_title = l_dict[q_lesson_id]
+
+                                    if has_quiz_title:
+                                        cur.execute("""
+                                            INSERT INTO quizzes (lesson_id, quiz_title, question_text, option_a, option_b, option_c, option_d, correct_option)
+                                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                        """, (q_lesson_id, selected_title, q_text.strip(), op_a.strip(), op_b.strip(),
+                                              op_c.strip(), op_d.strip(), correct_op))
+                                    else:
+                                        cur.execute("""
+                                            INSERT INTO quizzes (lesson_id, question_text, option_a, option_b, option_c, option_d, correct_option)
+                                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                        """, (q_lesson_id, q_text.strip(), op_a.strip(), op_b.strip(), op_c.strip(),
+                                              op_d.strip(), correct_op))
+
                                     conn.commit()
                                     cur.close()
                                     conn.close()
-                                    st.success("Sual uğurla bazaya əlavə olundu!")
+                                    st.success("🎉 Sual uğurla bazaya əlavə olundu!")
                                 except Exception as ex:
                                     st.error(f"Sual əlavə edilərkən xəta: {ex}")
                             else:
@@ -342,7 +364,7 @@ else:
                 st.error(f"Dərslər yüklənərkən xəta: {ex}")
 
     # ------------------------------------------
-    # B) ŞAGİRD USER PANELİ (LİNK VƏ VİDEOLAR YENİLƏNDİ)
+    # B) ŞAGİRD USER PANELİ
     # ------------------------------------------
     else:
         st.title(f"📖 Şagird İmtahan Portalı ({st.session_state['class_level']}-ci Sinif)")
@@ -371,19 +393,16 @@ else:
 
                         st.info(f"### 📘 Dərs Mövzusu: {ltitle}")
 
-                        # Standartlar Bölməsi
                         if lmain_std or lsub_std:
                             if lmain_std:
                                 st.markdown(f"📌 **Məzmun Standartı:** {lmain_std}")
                             if lsub_std:
                                 st.markdown(f"🎯 **Alt Standart:** {lsub_std}")
 
-                        # Dərs Mətni
                         if lcontent and lcontent.strip():
                             st.write("---")
                             st.markdown(lcontent)
 
-                        # --- RESURSLAR VƏ LİNK DÜYMƏLƏRİ (DÜZƏLDİLDİ) ---
                         file_clean = lfile_url.strip() if lfile_url else ""
                         video_clean = lvideo_url.strip() if lvideo_url else ""
 
@@ -402,7 +421,6 @@ else:
                                     st.link_button("🔗 Video İzahı Yeni Pəncərədə Aç", video_clean,
                                                    use_container_width=True)
 
-                            # Əgər YouTube videosudursa, səhifənin daxilində də pleyer göstər
                             if video_clean and ("youtube.com" in video_clean or "youtu.be" in video_clean):
                                 st.write("**🎥 Video İzah:**")
                                 try:
