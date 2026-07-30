@@ -10,7 +10,6 @@ def get_db_connection():
     return psycopg2.connect(st.secrets["postgres"]["url"])
 
 
-# Şifrəni təhlükəsiz həşləmək üçün funksiya
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
@@ -19,7 +18,7 @@ def check_hashes(password, hashed_text):
     return make_hashes(password) == hashed_text
 
 
-# Cədvəllərin Yaranması və Stukturun Yenilənməsi
+# Cədvəllərin Yaranması və Yeni Sütunların Avtomatik Əlavə Edilməsi
 try:
     conn = get_db_connection()
     cur = conn.cursor()
@@ -45,14 +44,20 @@ try:
         title VARCHAR(150) NOT NULL,
         class_level INT NOT NULL,
         content TEXT,
+        main_standard VARCHAR(255),
+        sub_standard VARCHAR(255),
+        file_url TEXT,
+        video_url TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     """)
 
-    # --- ƏGƏR CONTENT SÜTUNU YOXDURSA AVTOMATİK ƏLAVƏ ET (FIX) ---
-    cur.execute("""
-        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS content TEXT;
-    """)
+    # --- Əgər köhnə bazada bu sütunlar yoxdursa avtomatik əlavə et ---
+    cur.execute("ALTER TABLE lessons ADD COLUMN IF NOT EXISTS content TEXT;")
+    cur.execute("ALTER TABLE lessons ADD COLUMN IF NOT EXISTS main_standard VARCHAR(255);")
+    cur.execute("ALTER TABLE lessons ADD COLUMN IF NOT EXISTS sub_standard VARCHAR(255);")
+    cur.execute("ALTER TABLE lessons ADD COLUMN IF NOT EXISTS file_url TEXT;")
+    cur.execute("ALTER TABLE lessons ADD COLUMN IF NOT EXISTS video_url TEXT;")
 
     # 3. Quizlər Cədvəli
     cur.execute("""
@@ -69,7 +74,7 @@ try:
     );
     """)
 
-    # SABİT ADMİN HESABININ AVTOMATİK YARADILMASI (Username: admin, Pass: Muellim2026)
+    # Sabit Admin Hesabı (Username: admin, Pass: Muellim2026)
     admin_user = "admin"
     admin_pass = make_hashes("Muellim2026")
     cur.execute("SELECT id FROM users WHERE username = %s", (admin_user,))
@@ -142,14 +147,14 @@ if not st.session_state["logged_in"]:
             else:
                 st.warning("Zəhmət olmasa istifadəçi adı və şifrəni yazın.")
 
-    # TAB 2: YENİ QEYDİYYAT (Birbaşa Şagird Qeydiyyatı)
+    # TAB 2: YENİ QEYDİYYAT
     with auth_tab2:
         st.subheader("Yeni Şagird Hesabı Yaradın")
 
         reg_fullname = st.text_input("Ad və Soyadınız:", placeholder="Məs: Əli Əliyev", key="reg_fn")
         reg_username = st.text_input("İstifadəçi Adı seçin (Username):", placeholder="Məs: ali_aliyev", key="reg_un")
         reg_password = st.text_input("Şifrə təyin edin:", type="password", key="reg_pw")
-        reg_class = st.selectbox("Sinfinizi seçin:", list(range(1, 12)), index=8, key="reg_cl")  # Standart 9-cu sinif
+        reg_class = st.selectbox("Sinfinizi seçin:", list(range(1, 12)), index=8, key="reg_cl")
         reg_code = st.text_input("Müəllimin verdiyi 3 rəqəmli Şagird Kodu:", max_chars=3, placeholder="Məs: 101",
                                  key="reg_cd")
 
@@ -162,7 +167,6 @@ if not st.session_state["logged_in"]:
                         conn = get_db_connection()
                         cur = conn.cursor()
 
-                        # 1. Username təkrarını yoxla
                         cur.execute("SELECT id FROM users WHERE username = %s", (reg_username.strip(),))
                         if cur.fetchone():
                             st.error("Bu istifadəçi adı artıq götürülüb!")
@@ -170,7 +174,6 @@ if not st.session_state["logged_in"]:
                             conn.close()
                             st.stop()
 
-                        # 2. Şagird Kodu təkrarını yoxla
                         cur.execute("SELECT id FROM users WHERE student_code = %s", (reg_code.strip(),))
                         if cur.fetchone():
                             st.error("Bu 3 rəqəmli Şagird Kodu ilə artıq qeydiyyat keçilib!")
@@ -178,7 +181,6 @@ if not st.session_state["logged_in"]:
                             conn.close()
                             st.stop()
 
-                        # 3. BAZAYA YAZMA
                         hashed_pw = make_hashes(reg_password)
                         cur.execute(
                             "INSERT INTO users (full_name, username, password, role, student_code, class_level) VALUES (%s, %s, %s, %s, %s, %s)",
@@ -201,7 +203,6 @@ if not st.session_state["logged_in"]:
 # MƏRHƏLƏ 2: DAXİL OLDUQDAN SONRAKİ PANELLƏR
 # ==========================================
 else:
-    # Sol menyu
     st.sidebar.title(f"👤 {st.session_state['full_name']}")
 
     user_class = st.session_state.get('class_level', 5)
@@ -249,13 +250,28 @@ else:
             except Exception as ex:
                 st.error(f"Şagird siyahısı yüklənərkən xəta: {ex}")
 
-        # TAB 2: Dərs Əlavə Et
+        # TAB 2: Yeni Dərs Əlavə Et (STANDARTLAR VƏ LİNKLƏR BƏRPA OLUNDU)
         with m_tab2:
             st.subheader("📚 Bazaya Yeni Dərs Əlavə Et")
             with st.form("add_lesson_form"):
-                lesson_title = st.text_input("Dərsin Adı / Mövzu:")
+                lesson_title = st.text_input("Dərsin Adı / Mövzu:", placeholder="Məs: İnformasiyanın Kodlaşdırılması")
                 target_class = st.selectbox("Hansi sinif üçün?", list(range(1, 12)), index=8)
-                lesson_content = st.text_area("Dərs haqqında mətn:")
+
+                col_st1, col_st2 = st.columns(2)
+                with col_st1:
+                    main_std = st.text_input("Məzmun Standartı:", placeholder="Məs: 1.2. İnformasiya prosesləri")
+                with col_st2:
+                    sub_std = st.text_input("Alt Standart:", placeholder="Məs: 1.2.1. Ədəd sistemlərini fərqləndirir")
+
+                lesson_content = st.text_area("Dərs haqqında mətni / İzahı daxil edin:")
+
+                col_lnk1, col_lnk2 = st.columns(2)
+                with col_lnk1:
+                    f_url = st.text_input("Dərs üçün PDF / Fayl Linki:",
+                                          placeholder="https://drive.google.com/file/d/...")
+                with col_lnk2:
+                    v_url = st.text_input("Dərs üçün Video Linki (YouTube):",
+                                          placeholder="https://youtube.com/watch?v=...")
 
                 submit_lesson = st.form_submit_button("Dərsi Bazaya Əlavə Et")
                 if submit_lesson:
@@ -263,16 +279,27 @@ else:
                         try:
                             conn = get_db_connection()
                             cur = conn.cursor()
-                            cur.execute("INSERT INTO lessons (title, class_level, content) VALUES (%s, %s, %s)",
-                                        (lesson_title.strip(), target_class, lesson_content))
+                            cur.execute("""
+                                INSERT INTO lessons (title, class_level, content, main_standard, sub_standard, file_url, video_url) 
+                                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            """, (
+                                lesson_title.strip(),
+                                target_class,
+                                lesson_content.strip(),
+                                main_std.strip(),
+                                sub_std.strip(),
+                                f_url.strip(),
+                                v_url.strip()
+                            ))
                             conn.commit()
                             cur.close()
                             conn.close()
-                            st.success(f"'{lesson_title}' uğurla {target_class}-ci sinfə əlavə edildi!")
+                            st.success(
+                                f"'{lesson_title}' dərsi bütün standartlar və resurslarla {target_class}-ci sinfə əlavə edildi!")
                         except Exception as ex:
                             st.error(f"Dərs əlavə edilərkən xəta: {ex}")
                     else:
-                        st.warning("Lütfən dərsin adını yazın.")
+                        st.warning("Lütfən dərsin adını daxil edin.")
 
         # TAB 3: Quiz Yarat
         with m_tab3:
@@ -322,7 +349,7 @@ else:
                 st.error(f"Dərslər yüklənərkən xəta: {ex}")
 
     # ------------------------------------------
-    # B) ŞAGİRD USER PANELİ
+    # B) ŞAGİRD USER PANELİ (Bütün Standartlar və Linklər Görünür)
     # ------------------------------------------
     else:
         st.title(f"📖 Şagird İmtahan Portalı ({st.session_state['class_level']}-ci Sinif)")
@@ -330,8 +357,10 @@ else:
         try:
             conn = get_db_connection()
             cur = conn.cursor()
-            cur.execute("SELECT id, title, content FROM lessons WHERE class_level = %s",
-                        (st.session_state['class_level'],))
+            cur.execute("""
+                SELECT id, title, content, main_standard, sub_standard, file_url, video_url 
+                FROM lessons WHERE class_level = %s
+            """, (st.session_state['class_level'],))
             available_lessons = cur.fetchall()
             cur.close()
             conn.close()
@@ -345,7 +374,31 @@ else:
 
                 for l in available_lessons:
                     if l[0] == selected_lesson_id:
-                        st.info(f"**Dərs Mövzusu:** {l[1]}\n\n{l[2] if l[2] else ''}")
+                        lid, ltitle, lcontent, lmain_std, lsub_std, lfile_url, lvideo_url = l
+
+                        st.info(f"### 📘 Dərs Mövzusu: {ltitle}")
+
+                        # Standartlar Bölməsi
+                        if lmain_std or lsub_std:
+                            st.markdown(f"📌 **Məzmun Standartı:** {lmain_std if lmain_std else 'Təyin edilməyib'}")
+                            st.markdown(f"🎯 **Alt Standart:** {lsub_std if lsub_std else 'Təyin edilməyib'}")
+                            st.write("---")
+
+                        # Dərs Mətni
+                        if lcontent:
+                            st.markdown(lcontent)
+
+                        # Resurslar Və Linklər
+                        if lfile_url or lvideo_url:
+                            st.write("---")
+                            st.subheader("📎 Dərs Resursları Və Materiallar")
+                            col_res1, col_res2 = st.columns(2)
+                            with col_res1:
+                                if lfile_url:
+                                    st.markdown(f"📄 [Dərs Materialını / PDF Yüklə]({lfile_url})")
+                            with col_res2:
+                                if lvideo_url:
+                                    st.markdown(f"🎥 [Video İzaha Bax]({lvideo_url})")
 
                 # İmtahan sualları
                 conn = get_db_connection()
