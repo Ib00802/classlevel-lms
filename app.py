@@ -134,7 +134,7 @@ if role == "👨‍🎓 Şagird Paneli":
         try:
             conn = get_db_connection()
             cur = conn.cursor()
-            cur.execute("SELECT lesson_id, title FROM lessons WHERE class_level = %s", (student_class,))
+            cur.execute("SELECT id, title FROM lessons WHERE class_level = %s", (student_class,))
             available_lessons = cur.fetchall()
             cur.close()
             conn.close()
