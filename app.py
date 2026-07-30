@@ -1,7 +1,6 @@
 import streamlit as st
 import psycopg2
 import hashlib
-import random
 
 st.set_page_config(page_title="ClassLevel LMS Portal", page_icon="🚀", layout="wide")
 
@@ -20,7 +19,7 @@ def check_hashes(password, hashed_text):
     return make_hashes(password) == hashed_text
 
 
-# Cədvəllərin Yaranması
+# Cədvəllərin Yaranması və Sabit Admin Hesabının Əlavə Edilməsi
 try:
     conn = get_db_connection()
     cur = conn.cursor()
@@ -65,13 +64,23 @@ try:
     );
     """)
 
+    # SABİT ADMİN HESABININ AVTOMATİK YARADILMASI (Username: admin, Pass: Muellim2026)
+    admin_user = "admin"
+    admin_pass = make_hashes("Muellim2026")
+    cur.execute("SELECT id FROM users WHERE username = %s", (admin_user,))
+    if not cur.fetchone():
+        cur.execute("""
+            INSERT INTO users (full_name, username, password, role, student_code, class_level)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, ("Müəllim (Admin)", admin_user, admin_pass, "admin", "000", 0))
+
     conn.commit()
     cur.close()
     conn.close()
 except Exception as e:
     st.error(f"❌ Supabase Qoşulma Xətası: {e}")
 
-# --- SESSION STATE (Sessiya İdarəetməsi) ---
+# --- SESSION STATE ---
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "username" not in st.session_state:
@@ -82,16 +91,12 @@ if "full_name" not in st.session_state:
     st.session_state["full_name"] = ""
 if "class_level" not in st.session_state:
     st.session_state["class_level"] = 5
-if "verification_code" not in st.session_state:
-    st.session_state["verification_code"] = None
-if "pending_user_data" not in st.session_state:
-    st.session_state["pending_user_data"] = None
 
 # ==========================================
 # MƏRHƏLƏ 1: GİRİŞ / QEYDİYYAT SƏHİFƏSİ
 # ==========================================
 if not st.session_state["logged_in"]:
-    st.title("🚀 ClassLevel LMS - Giriş Və Qeydiyyat Portalı")
+    st.title("🚀 ClassLevel LMS - Portal")
 
     auth_tab1, auth_tab2 = st.tabs(["🔑 Sistemə Giriş (Login)", "📝 Yeni Qeydiyyat (Register)"])
 
@@ -132,113 +137,59 @@ if not st.session_state["logged_in"]:
             else:
                 st.warning("Zəhmət olmasa istifadəçi adı və şifrəni yazın.")
 
-    # TAB 2: YENİ QEYDİYYAT (Mərhələli və Sinif Dəqiqliyi İlə)
+    # TAB 2: YENİ QEYDİYYAT (Birbaşa Şagird Qeydiyyatı)
     with auth_tab2:
-        st.subheader("Yeni hesab yaradın")
+        st.subheader("Yeni Şagird Hesabı Yaradın")
 
-        # 1-Cİ ADDIM: Məlumatların daxil edilməsi
-        if st.session_state["verification_code"] is None:
-            reg_fullname = st.text_input("Ad və Soyadınız:", placeholder="Məs: Əli Əliyev", key="reg_fn")
-            reg_username = st.text_input("İstifadəçi Adı seçin (Username):", placeholder="Məs: ali_aliyev",
-                                         key="reg_un")
-            reg_password = st.text_input("Şifrə təyin edin:", type="password", key="reg_pw")
-            reg_role = st.selectbox("Hesab Növü (Rolunuz):", ["Şagird (User)", "Müəllim (Admin)"], key="reg_rl")
+        reg_fullname = st.text_input("Ad və Soyadınız:", placeholder="Məs: Əli Əliyev", key="reg_fn")
+        reg_username = st.text_input("İstifadəçi Adı seçin (Username):", placeholder="Məs: ali_aliyev", key="reg_un")
+        reg_password = st.text_input("Şifrə təyin edin:", type="password", key="reg_pw")
+        reg_class = st.selectbox("Sinfinizi seçin:", list(range(1, 12)), index=4, key="reg_cl")
+        reg_code = st.text_input("Müəllimin verdiyi 3 rəqəmli Şagird Kodu:", max_chars=3, placeholder="Məs: 101",
+                                 key="reg_cd")
 
-            selected_class = None
-            reg_code = None
-
-            if reg_role == "Şagird (User)":
-                selected_class = st.selectbox("Sinfinizi seçin:", list(range(1, 12)), index=4, key="reg_cl")
-                reg_code = st.text_input("Müəllimin verdiyi 3 rəqəmli Şagird Kodu:", max_chars=3,
-                                         placeholder="Məs: 101", key="reg_cd")
-
-            if st.button("Təsdiq Kodu Göndər"):
-                if reg_fullname and reg_username and reg_password:
-                    if reg_role == "Şagird (User)" and (not reg_code or len(reg_code) != 3 or not reg_code.isdigit()):
-                        st.error("Şagird Kodu dəqiq 3 rəqəmdən ibarət olmalıdır!")
-                    else:
-                        try:
-                            conn = get_db_connection()
-                            cur = conn.cursor()
-
-                            # Username kontrolu
-                            cur.execute("SELECT id FROM users WHERE username = %s", (reg_username.strip(),))
-                            if cur.fetchone():
-                                st.error("Bu istifadəçi adı artıq götürülüb!")
-                                cur.close()
-                                conn.close()
-                                st.stop()
-
-                            # Şagird kodu kontrolu
-                            if reg_role == "Şagird (User)":
-                                cur.execute("SELECT id FROM users WHERE student_code = %s", (reg_code.strip(),))
-                                if cur.fetchone():
-                                    st.error("Bu 3 rəqəmli Şagird Kodu ilə artıq qeydiyyat keçilib!")
-                                    cur.close()
-                                    conn.close()
-                                    st.stop()
-
-                            cur.close()
-                            conn.close()
-
-                            # Təsdiq Kodu generatoru
-                            v_code = str(random.randint(1000, 9999))
-                            st.session_state["verification_code"] = v_code
-
-                            # Yalnız seçilən 1 sinfi yadda saxlayırıq
-                            st.session_state["pending_user_data"] = {
-                                "fullname": reg_fullname.strip(),
-                                "username": reg_username.strip(),
-                                "password": make_hashes(reg_password),
-                                "role": "admin" if reg_role == "Müəllim (Admin)" else "student",
-                                "code": reg_code.strip() if reg_role == "Şagird (User)" else None,
-                                "class": int(selected_class) if reg_role == "Şagird (User)" else 0
-                            }
-                            st.rerun()
-                        except Exception as ex:
-                            st.error(f"Yoxlama xətası: {ex}")
+        if st.button("Qeydiyyatı Tamamla"):
+            if reg_fullname and reg_username and reg_password and reg_code:
+                if len(reg_code.strip()) != 3 or not reg_code.strip().isdigit():
+                    st.error("Şagird Kodu dəqiq 3 rəqəmdən ibarət olmalıdır (Məs: 101)!")
                 else:
-                    st.warning("Lütfən bütün xanaları doldurun.")
+                    try:
+                        conn = get_db_connection()
+                        cur = conn.cursor()
 
-        # 2-Cİ ADDIM: Verification (Təsdiq Kodu) daxil etmə ekranı
-        else:
-            st.info("🔒 **Təhlükəsizlik Təsdiqi:** Təsdiq kodu yaradıldı.")
-            st.warning(
-                f"🔑 Təsdiq Şifrəniz: **{st.session_state['verification_code']}** (Zəhmət olmasa aşağıdakı xanaya yazın)")
-
-            user_v_code = st.text_input("4 rəqəmli Təsdiq Kodunu daxil edin:", max_chars=4, key="ver_input")
-
-            col_ver1, col_ver2 = st.columns(2)
-            with col_ver1:
-                if st.button("Qeydiyyatı Tamamla"):
-                    if user_v_code.strip() == st.session_state["verification_code"]:
-                        data = st.session_state["pending_user_data"]
-                        try:
-                            conn = get_db_connection()
-                            cur = conn.cursor()
-                            cur.execute(
-                                "INSERT INTO users (full_name, username, password, role, student_code, class_level) VALUES (%s, %s, %s, %s, %s, %s)",
-                                (data["fullname"], data["username"], data["password"], data["role"], data["code"],
-                                 data["class"])
-                            )
-                            conn.commit()
+                        # 1. Username təkrarını yoxla
+                        cur.execute("SELECT id FROM users WHERE username = %s", (reg_username.strip(),))
+                        if cur.fetchone():
+                            st.error("Bu istifadəçi adı artıq götürülüb!")
                             cur.close()
                             conn.close()
+                            st.stop()
 
-                            st.success(
-                                "🎉 Qeydiyyat uğurla tamamlandı! İndi 'Sistemə Giriş Et' bölməsindən daxil ola bilərsiniz.")
-                            st.session_state["verification_code"] = None
-                            st.session_state["pending_user_data"] = None
-                        except Exception as ex:
-                            st.error(f"Qeydiyyatı tamamlama xətası: {ex}")
-                    else:
-                        st.error("Daxil edilən təsdiq kodu yanlışdır!")
+                        # 2. Şagird Kodu təkrarını yoxla
+                        cur.execute("SELECT id FROM users WHERE student_code = %s", (reg_code.strip(),))
+                        if cur.fetchone():
+                            st.error("Bu 3 rəqəmli Şagird Kodu ilə artıq qeydiyyat keçilib!")
+                            cur.close()
+                            conn.close()
+                            st.stop()
 
-            with col_ver2:
-                if st.button("Yenidən Başla / Ləğv Et"):
-                    st.session_state["verification_code"] = None
-                    st.session_state["pending_user_data"] = None
-                    st.rerun()
+                        # 3. BAZAYA BİRBAŞA YAZMA (Rol: 'student')
+                        hashed_pw = make_hashes(reg_password)
+                        cur.execute(
+                            "INSERT INTO users (full_name, username, password, role, student_code, class_level) VALUES (%s, %s, %s, %s, %s, %s)",
+                            (reg_fullname.strip(), reg_username.strip(), hashed_pw, 'student', reg_code.strip(),
+                             int(reg_class))
+                        )
+                        conn.commit()
+                        cur.close()
+                        conn.close()
+
+                        st.success(
+                            "🎉 Qeydiyyat uğurla tamamlandı! İndi 'Sistemə Giriş Et' bölməsindən daxil ola bilərsiniz.")
+                    except Exception as ex:
+                        st.error(f"Qeydiyyat xətası: {ex}")
+            else:
+                st.warning("Lütfən bütün xanaları doldurun.")
 
 
 # ==========================================
@@ -265,12 +216,12 @@ else:
         st.title("👨‍🏫 Müəllim İdarəetmə Paneli (ADMIN)")
 
         m_tab1, m_tab2, m_tab3 = st.tabs([
-            "📊 Şagird Siyahısı & Şagird Kodları",
+            "📊 Şagird Siyahısı & Kodlar",
             "➕ Yeni Dərs Əlavə Et",
             "❓ İmtahan Sualı Yarat"
         ])
 
-        # TAB 1: Şagirdlərin Unikal Kodları ilə Siyahısı
+        # TAB 1: Şagird Siyahısı
         with m_tab1:
             st.subheader("🎓 Qeydiyyatdan Keçmiş Şagirdlər Siyahısı")
             try:
