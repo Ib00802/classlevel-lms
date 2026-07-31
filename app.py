@@ -1,6 +1,7 @@
 import streamlit as st
 import psycopg2
 import pandas as pd
+import hashlib
 
 # Səhifə konfiqurasiyası
 st.set_page_config(page_title="ClassLevel LMS", page_icon="🎓", layout="wide")
@@ -163,11 +164,12 @@ if st.session_state.user is None:
                         st.rerun()
                     else:
                         try:
+                            hashed_login_pass = hashlib.md5(password.strip().encode()).hexdigest()
                             conn = get_db_connection()
                             cur = conn.cursor()
                             cur.execute(
                                 "SELECT id, full_name, username, role, class_level FROM users WHERE username = %s AND password = %s",
-                                (username.strip(), password.strip())
+                                (username.strip(), hashed_login_pass)
                             )
                             user_data = cur.fetchone()
                             cur.close()
@@ -201,11 +203,12 @@ if st.session_state.user is None:
             if st.button("Qeydiyyatı Tamamla", use_container_width=True):
                 if new_fullname and new_user and new_pass:
                     try:
+                        hashed_new_pass = hashlib.md5(new_pass.strip().encode()).hexdigest()
                         conn = get_db_connection()
                         cur = conn.cursor()
                         cur.execute(
                             "INSERT INTO users (full_name, username, password, role, student_code, class_level) VALUES (%s, %s, %s, %s, %s, %s)",
-                            (new_fullname.strip(), new_user.strip(), new_pass.strip(), 'student', new_code.strip(),
+                            (new_fullname.strip(), new_user.strip(), hashed_new_pass, 'student', new_code.strip(),
                              new_class)
                         )
                         conn.commit()
