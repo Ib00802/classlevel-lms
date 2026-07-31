@@ -7,11 +7,10 @@ st.set_page_config(page_title="ClassLevel LMS", page_icon="🎓", layout="wide")
 
 
 # ==========================================
-# BAZA İLƏ BAĞLANTI FUNKSİYASI (SUPABASE SEİKRET)
+# BAZA İLƏ BAĞLANTI FUNKSİYASI (SUPABASE SECRETS)
 # ==========================================
 def get_db_connection():
     try:
-        # Streamlit Cloud Secrets üzərindən lazımi parametrlərlə qoşulma
         if "postgres" in st.secrets:
             return psycopg2.connect(
                 host=st.secrets["postgres"]["host"],
@@ -29,7 +28,6 @@ def get_db_connection():
                 port=st.secrets["port"]
             )
     except Exception as e:
-        # Birbaşa URL varsa fall-back kimi qoşulur
         try:
             return psycopg2.connect(st.secrets["postgres"]["url"])
         except:
@@ -57,30 +55,44 @@ if st.session_state.user is None:
 
             if st.button("Daxil Ol", use_container_width=True):
                 if username and password:
-                    try:
-                        conn = get_db_connection()
-                        cur = conn.cursor()
-                        cur.execute(
-                            "SELECT id, full_name, username, role, class_level FROM users WHERE username = %s AND password = %s",
-                            (username.strip(), password.strip()))
-                        user_data = cur.fetchone()
-                        cur.close()
-                        conn.close()
+                    # 1. Təhlükəsizlik/Əsas Admin yoxlaması (Hardcoded fallback)
+                    if username.strip() == "admin" and password.strip() == "Muellim2026!":
+                        st.session_state.user = {
+                            "id": 0,
+                            "full_name": "Sistem Administratoru",
+                            "username": "admin",
+                            "role": "teacher",
+                            "class_level": 0
+                        }
+                        st.success("Uğurla daxil oldunuz!")
+                        st.rerun()
+                    else:
+                        # 2. Bazadan istifadəçilərin yoxlanması
+                        try:
+                            conn = get_db_connection()
+                            cur = conn.cursor()
+                            cur.execute(
+                                "SELECT id, full_name, username, role, class_level FROM users WHERE username = %s AND password = %s",
+                                (username.strip(), password.strip())
+                            )
+                            user_data = cur.fetchone()
+                            cur.close()
+                            conn.close()
 
-                        if user_data:
-                            st.session_state.user = {
-                                "id": user_data[0],
-                                "full_name": user_data[1],
-                                "username": user_data[2],
-                                "role": user_data[3],
-                                "class_level": user_data[4]
-                            }
-                            st.success("Uğurla daxil oldunuz!")
-                            st.rerun()
-                        else:
-                            st.error("İstifadəçi adı və ya şifrə yanlışdır.")
-                    except Exception as e:
-                        st.error(f"Sistem xətası: {e}")
+                            if user_data:
+                                st.session_state.user = {
+                                    "id": user_data[0],
+                                    "full_name": user_data[1],
+                                    "username": user_data[2],
+                                    "role": user_data[3],
+                                    "class_level": user_data[4]
+                                }
+                                st.success("Uğurla daxil oldunuz!")
+                                st.rerun()
+                            else:
+                                st.error("İstifadəçi adı və ya şifrə yanlışdır.")
+                        except Exception as e:
+                            st.error(f"Sistem xətası: {e}")
                 else:
                     st.warning("Məlumatları tam doldurun.")
 
@@ -115,7 +127,7 @@ if st.session_state.user is None:
     # ==========================================
 else:
     # --------------------------------------
-    # HİSSƏ A: MÜƏLLİM PANELSİ
+    # HİSSƏ A: MÜƏLLİM PANELİ
     # --------------------------------------
     if st.session_state.user["role"] == "teacher":
         st.title("👨‍🏫 Müəllim İdarəetmə Paneli")
@@ -234,7 +246,7 @@ else:
                             st.error(f"Xəta: {e}")
 
     # --------------------------------------
-    # HİSSƏ B: ŞAGİRD PANELSİ
+    # HİSSƏ B: ŞAGİRD PANELİ
     # --------------------------------------
     elif st.session_state.user["role"] == "student":
         student_class = st.session_state.user.get("class_level", 9)
