@@ -1,33 +1,21 @@
 import streamlit as st
 import psycopg2
 import hashlib
+import pandas as pd
 
-st.set_page_config(
-    page_title="ClassLevel LMS Portal",
-    page_icon="🎓",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# --- MODERN UI & CUSTOM CSS ---
-st.markdown("""
-    <style>
-    .main { background-color: #f8f9fa; }
-    .stCard {
-        background-color: #ffffff;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-        margin-bottom: 20px;
-    }
-    h1, h2, h3 { color: #1e293b; font-family: 'Inter', sans-serif; }
-    .stButton>button { border-radius: 8px; font-weight: 600; transition: all 0.3s ease; }
-    </style>
-""", unsafe_allow_html=True)
+# --- SƏHİFƏNİN KONFİQURASİYASI ---
+st.set_page_config(page_title="ClassLevel LMS", page_icon="🎓", layout="wide")
 
 
+# --- KÖMƏKÇİ FUNKSİYALAR VƏ BAZA BAĞLANTISI ---
+# QEYD: Bura öz PostgreSQL məlumatlarınızı daxil edin
 def get_db_connection():
-    return psycopg2.connect(st.secrets["postgres"]["url"])
+    return psycopg2.connect(
+        host="localhost",
+        database="your_database_name",
+        user="your_db_user",
+        password="your_db_password"
+    )
 
 
 def make_hashes(password):
@@ -35,110 +23,54 @@ def make_hashes(password):
 
 
 def check_hashes(password, hashed_text):
-    return make_hashes(password) == hashed_text
+    if make_hashes(password) == hashed_text:
+        return True
+    return False
 
 
-# Cədvəllərin Yeni Tələblərə Uyğun Genişləndirilməsi
-try:
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        full_name VARCHAR(100) NOT NULL,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        role VARCHAR(20) NOT NULL,
-        student_code VARCHAR(10) UNIQUE,
-        class_level INT DEFAULT 5,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    """)
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS lessons (
-        id SERIAL PRIMARY KEY,
-        title VARCHAR(150) NOT NULL,
-        class_level INT NOT NULL,
-        content TEXT,
-        main_standard VARCHAR(255),
-        sub_standard VARCHAR(255),
-        file_url TEXT,
-        video_url TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    """)
-
-    # Quiz paketləri cədvəli (Quiz adı, çətinlik, vaxt)
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS quiz_packages (
-        id SERIAL PRIMARY KEY,
-        class_level INT NOT NULL,
-        title VARCHAR(150) NOT NULL,
-        difficulty VARCHAR(50) DEFAULT 'Orta',
-        duration_minutes INT DEFAULT 10,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    """)
-
-    # Suallar cədvəli (Quiz paketlərinə bağlı)
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS quiz_questions (
-        id SERIAL PRIMARY KEY,
-        package_id INT REFERENCES quiz_packages(id) ON DELETE CASCADE,
-        question_text TEXT NOT NULL,
-        option_a TEXT,
-        option_b TEXT,
-        option_c TEXT,
-        option_d TEXT,
-        correct_option VARCHAR(1)
-    );
-    """)
-
-    # Şagird statistikaları üçün cədvəl
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS student_stats (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(50),
-        videos_watched INT DEFAULT 0,
-        total_watch_minutes INT DEFAULT 0,
-        quizzes_taken INT DEFAULT 0,
-        total_correct INT DEFAULT 0,
-        total_questions_answered INT DEFAULT 0
-    );
-    """)
-
-    admin_user = "admin"
-    admin_pass = make_hashes("Muellim2026")
-    cur.execute("SELECT id FROM users WHERE username = %s", (admin_user,))
-    if not cur.fetchone():
+def create_results_table():
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
         cur.execute("""
-            INSERT INTO users (full_name, username, password, role, student_code, class_level)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, ("Müəllim (Admin)", admin_user, admin_pass, "admin", "000", 0))
+            CREATE TABLE IF NOT EXISTS quiz_results (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(255),
+                package_id INT,
+                correct_count INT,
+                wrong_count INT,
+                empty_count INT,
+                score_percent FLOAT,
+                attempt_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Baza xətası: {e}")
 
-    conn.commit()
-    cur.close()
-    conn.close()
-except Exception as e:
-    st.error(f"❌ Verilənlər Bazası Xətası: {e}")
 
-# Session State Tənzimləmələri
+# Proqram işə düşəndə nəticə cədvəlinin mövcudluğunu yoxlayır və yaradır
+create_results_table()
+
+# --- SESSİYA (SESSION STATE) DƏYİŞƏNLƏRİ ---
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "username" not in st.session_state:
     st.session_state["username"] = ""
-if "user_role" not in st.session_state:
-    st.session_state["user_role"] = ""
 if "full_name" not in st.session_state:
     st.session_state["full_name"] = ""
+if "user_role" not in st.session_state:
+    st.session_state["user_role"] = ""
 if "class_level" not in st.session_state:
     st.session_state["class_level"] = 5
 if "student_page" not in st.session_state:
     st.session_state["student_page"] = "Əsas səhifə"
 
-# --- GİRİŞ / QEYDİYYAT SƏHİFƏSİ ---
+# ==========================================
+# GİRİŞ VƏ QEYDİYYAT SƏHİFƏSİ
+# ==========================================
 if not st.session_state["logged_in"]:
     col_c1, col_c2, col_c3 = st.columns([1, 2, 1])
     with col_c2:
@@ -198,7 +130,11 @@ if not st.session_state["logged_in"]:
                         st.success("Qeydiyyat tamamlandı! İndi daxil ola bilərsiniz.")
                     except Exception as ex:
                         st.error(f"Qeydiyyat xətası: {ex}")
+    # ==========================================
+    # SİSTEMƏ DAXİL OLDUQDAN SONRAKİ EKRAN
+    # ==========================================
 else:
+    # --- SOL MENYU (SIDEBAR) ---
     with st.sidebar:
         st.markdown(f"### 👤 {st.session_state['full_name']}")
         role_txt = "👨‍🏫 Müəllim (Admin)" if st.session_state[
@@ -222,51 +158,16 @@ else:
             st.session_state.clear()
             st.rerun()
 
-    # --- MÜƏLLİM PANELİ ---
-    if st.session_state["user_role"] == "admin":
-        st.markdown("<h1>👨‍🏫 Müəllim İdarəetmə Paneli</h1>", unsafe_allow_html=True)
-        m_t1, m_t2, m_t3 = st.tabs(["📊 Şagirdlər", "➕ Dərs Əlavə Et", "📝 Quiz Paketi Yarat"])
+    # --- MÜƏLLİM (ADMİN) PANELİ ---
+    if st.session_state['user_role'] == 'admin':
+        st.header("Müəllim İdarəetmə Paneli")
+        m_t1, m_t2, m_t3 = st.tabs(["👥 Şagirdlər", "📚 Materiallar", "📝 Quiz Paketi Yarat"])
 
+        # (Sizin köhnə m_t1 və m_t2 kodlarınız bura gələcək)
         with m_t1:
-            st.subheader("Qeydiyyatdakı Şagirdlər")
-            try:
-                conn = get_db_connection()
-                cur = conn.cursor()
-                cur.execute(
-                    "SELECT id, full_name, username, student_code, class_level FROM users WHERE role = 'student'")
-                studs = cur.fetchall()
-                cur.close()
-                conn.close()
-                if studs:
-                    st.dataframe(
-                        [{"ID": s[0], "Ad Soyad": s[1], "Username": s[2], "Kod": s[3], "Sinif": f"{s[4]}-ci sinif"} for
-                         s in studs], use_container_width=True)
-                else:
-                    st.info("Şagird yoxdur.")
-            except Exception as e:
-                st.error(e)
-
+            st.write("Şagirdlərin siyahısı və idarəedilməsi.")
         with m_t2:
-            st.subheader("Yeni Dərs Əlavə Et")
-            with st.form("les_form"):
-                ltitle = st.text_input("Dərs Başlığı:")
-                lclass = st.selectbox("Sinif:", list(range(1, 12)), index=8)
-                lcont = st.text_area("Mətn / İzah:")
-                lf_url = st.text_input("PDF Fayl Linki:")
-                lv_url = st.text_input("YouTube Video Linki:")
-                if st.form_submit_button("Dərsi Əlavə Et"):
-                    try:
-                        conn = get_db_connection()
-                        cur = conn.cursor()
-                        cur.execute(
-                            "INSERT INTO lessons (title, class_level, content, file_url, video_url) VALUES (%s, %s, %s, %s, %s)",
-                            (ltitle, lclass, lcont, lf_url, lv_url))
-                        conn.commit()
-                        cur.close()
-                        conn.close()
-                        st.success("Dərs əlavə olundu!")
-                    except Exception as e:
-                        st.error(e)
+            st.write("Dərs materiallarının yüklənməsi.")
 
         with m_t3:
             st.subheader("Quiz Paketi və Sualların Tərtibi")
@@ -315,7 +216,6 @@ else:
                     selected_pack_id = st.selectbox("Sual əlavə olunacaq Quizi seçin:", list(pack_options.keys()),
                                                     format_func=lambda x: pack_options[x], key="sel_pack_for_q")
 
-                    # clear_on_submit=True xanaların avtomatik təmizlənməsini təmin edir
                     with st.form("add_questions_form", clear_on_submit=True):
                         q_text = st.text_area("Sual Mətni:", key="qa_text")
                         opt_a = st.text_input("Variant A:", key="qa_a")
@@ -329,14 +229,14 @@ else:
                                 conn = get_db_connection()
                                 cur = conn.cursor()
                                 cur.execute("""
-                                    INSERT INTO quiz_questions (package_id, question_text, option_a, option_b, option_c, option_d, correct_option)
-                                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                                """, (selected_pack_id, q_text, opt_a, opt_b, opt_c, opt_d, cor_opt))
+                                      INSERT INTO quiz_questions (package_id, question_text, option_a, option_b, option_c, option_d, correct_option)
+                                      VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                  """, (selected_pack_id, q_text, opt_a, opt_b, opt_c, opt_d, cor_opt))
                                 conn.commit()
                                 cur.close()
                                 conn.close()
                                 st.success("Sual uğurla əlavə olundu!")
-                                st.rerun()  # Səhifəni yeniləyir ki, yeni sual üçün hazır olsun
+                                st.rerun()
                             else:
                                 st.warning("Sual mətni və variantlar boş ola bilməz.")
                 else:
@@ -345,180 +245,178 @@ else:
                 st.error(e)
 
     # --- ŞAGİRD PANELİ ---
-    else:
-        curr_page = st.session_state.get("student_page", "Əsas səhifə")
+    elif st.session_state['user_role'] == 'student':
+        if st.session_state.get("student_page") == "Əsas səhifə":
+            st.header("🏠 Əsas Səhifə")
+            st.write("Sizin əsas məlumatlarınız və elanlar burada görünəcək.")
 
-        # 1. ƏSAS SƏHİFƏ / SCORE BOARD
-        if curr_page == "Əsas səhifə":
-            st.markdown(f"<h1>👋 Xoş gəldiniz, {st.session_state['full_name']}!</h1>", unsafe_allow_html=True)
-            st.markdown("### 🏆 Sizin Nailiyyətlər Paneli (Score Board)")
+        elif st.session_state.get("student_page") == "Materiallar":
+            st.header("📚 Dərs Materialları")
+            st.write("Müəlliminizin yüklədiyi materiallar burada olacaq.")
 
-            # Statistika məlumatlarının çəkilməsi
+        elif st.session_state.get("student_page") == "Quizlər":
+            st.header("✍️ Quizlər və İmtahanlar")
+
+            student_class = st.session_state['class_level']
+            username = st.session_state['username']
+
             try:
                 conn = get_db_connection()
                 cur = conn.cursor()
-                cur.execute(
-                    "SELECT videos_watched, total_watch_minutes, quizzes_taken, total_correct, total_questions_answered FROM student_stats WHERE username = %s",
-                    (st.session_state['username'],))
-                s_stat = cur.fetchone()
-                cur.close()
-                conn.close()
-            except Exception:
-                s_stat = None
 
-            v_count = s_stat[0] if s_stat else 0
-            v_mins = s_stat[1] if s_stat else 0
-            q_count = s_stat[2] if s_stat else 0
-            t_correct = s_stat[3] if s_stat else 0
-            t_answered = s_stat[4] if s_stat else 0
+                # Yalnız son 3 gündə İŞLƏNMƏYƏN quizləri çəkirik
+                cur.execute("""
+                      SELECT id, title, duration_minutes 
+                      FROM quiz_packages 
+                      WHERE class_level = %s 
+                      AND id NOT IN (
+                          SELECT package_id 
+                          FROM quiz_results 
+                          WHERE username = %s AND attempt_date >= NOW() - INTERVAL '3 days'
+                      )
+                      ORDER BY id DESC
+                  """, (student_class, username))
+                available_quizzes = cur.fetchall()
 
-            accuracy_pct = round((t_correct / t_answered * 100), 1) if t_answered > 0 else 0.0
-
-            col_sb1, col_sb2 = st.columns(2)
-            with col_sb1:
-                st.metric(label="📺 İzlənilən Video Sayı", value=f"{v_count} ədəd")
-                st.metric(label="⏱️ Videolara Sərf Olunan Vaxt", value=f"{v_mins} dəqiqə")
-            with col_sb2:
-                st.metric(label="✍️ İşlənən Quiz Sayı", value=f"{q_count} ədəd")
-                st.metric(label="🎯 Ümumi Düzgünlük Faizi", value=f"%{accuracy_pct}")
-
-            st.write("---")
-            st.info(
-                "💡 Sol menyudan **Dərs Materialları** və ya **Quizlər və İmtahanlar** bölməsinə keçid edə bilərsiniz.")
-
-        # 2. DƏRS MATERİALLARI SƏHİFƏSİ
-        elif curr_page == "Materiallar":
-            st.markdown("<h1>📚 Dərs Materialları və Mövzular</h1>", unsafe_allow_html=True)
-            try:
-                conn = get_db_connection()
-                cur = conn.cursor()
-                cur.execute(
-                    "SELECT id, title, content, file_url, video_url FROM lessons WHERE class_level = %s ORDER BY id DESC",
-                    (st.session_state['class_level'],))
-                lessons = cur.fetchall()
-                cur.close()
-                conn.close()
-
-                if lessons:
-                    for l in lessons:
-                        with st.expander(f"📘 Mövzu: {l[1]}"):
-                            if l[2]:
-                                st.markdown(l[2])
-                            if l[3]:
-                                st.link_button("📄 PDF Faylı Aç", l[3])
-                            if l[4]:
-                                st.link_button("🎥 Video İzahı İzlə", l[4])
-                                try:
-                                    st.video(l[4])
-                                except Exception:
-                                    pass
+                if not available_quizzes:
+                    st.info(
+                        "Hazırda sizin üçün aktiv quiz paketi mövcud deyil və ya mövcud quizləri artıq işləmisiniz (Növbəti cəhd üçün 3 gün gözləməlisiniz).")
                 else:
-                    st.warning("Bu sinif üçün material tapılmadı.")
-            except Exception as e:
-                st.error(e)
+                    quiz_options = {q[0]: f"{q[1]} ({q[2]} dəqiqə)" for q in available_quizzes}
+                    selected_quiz = st.selectbox("İşləmək istədiyiniz quizi seçin:", list(quiz_options.keys()),
+                                                 format_func=lambda x: quiz_options[x])
 
-        # 3. QUİZLƏR VƏ İMTAHANLAR SƏHİFƏSİ
-        elif curr_page == "Quizlər":
-            st.markdown("<h1>✍️ Quizlər və İmtahan Modulu</h1>", unsafe_allow_html=True)
-            try:
-                conn = get_db_connection()
-                cur = conn.cursor()
-                cur.execute("SELECT id, title, difficulty, duration_minutes FROM quiz_packages WHERE class_level = %s",
-                            (st.session_state['class_level'],))
-                packages = cur.fetchall()
-                cur.close()
-                conn.close()
+                    if st.button("Quizi Başlat", use_container_width=True):
+                        st.session_state['active_quiz'] = selected_quiz
+                        st.session_state['quiz_submitted'] = False
+                        st.rerun()
 
-                if packages:
-                    pkg_dict = {p[0]: f"{p[1]} (Çətinlik: {p[2]} | Vaxt: {p[3]} dəq)" for p in packages}
-                    selected_pkg = st.selectbox("Mövcud Quiz Paketini Seçin:", list(pkg_dict.keys()),
-                                                format_func=lambda x: pkg_dict[x])
+                # ==========================================
+                # AKTİV QUİZ VƏ BAXIŞ REJİMİ
+                # ==========================================
+                if 'active_quiz' in st.session_state and st.session_state['active_quiz'] is not None:
+                    active_q_id = st.session_state['active_quiz']
 
-                    if selected_pkg:
-                        conn = get_db_connection()
-                        cur = conn.cursor()
-                        cur.execute(
-                            "SELECT id, question_text, option_a, option_b, option_c, option_d, correct_option FROM quiz_questions WHERE package_id = %s",
-                            (selected_pkg,))
-                        questions = cur.fetchall()
-                        cur.close()
-                        conn.close()
+                    cur.execute("""
+                          SELECT id, question_text, option_a, option_b, option_c, option_d, correct_option 
+                          FROM quiz_questions 
+                          WHERE package_id = %s
+                      """, (active_q_id,))
+                    questions = cur.fetchall()
 
-                        if questions:
-                            st.write(f"📌 **Sualların sayı:** {len(questions)} ədəd")
+                    if not questions:
+                        st.warning("Bu quiz paketində hələ sual yoxdur.")
+                    else:
+                        # 1. QUİZİ İŞLƏMƏ MƏRHƏLƏSİ
+                        if not st.session_state.get('quiz_submitted', False):
+                            st.write("---")
+                            st.subheader("Uğurlar! Sualları diqqətlə oxuyun.")
 
-                            # Suallar arasında irəli-geri oxlar ilə naviqasiya üçün Session state
-                            if "q_index" not in st.session_state:
-                                st.session_state["q_index"] = 0
-                            if "user_answers" not in st.session_state:
-                                st.session_state["user_answers"] = {}
+                            with st.form("take_quiz_form"):
+                                user_answers = {}
+                                for idx, q in enumerate(questions):
+                                    st.markdown(f"**Sual {idx + 1}:** {q[1]}")
+                                    opts = ["Cavablandırmaq istəmirəm", f"A) {q[2]}", f"B) {q[3]}", f"C) {q[4]}",
+                                            f"D) {q[5]}"]
+                                    ans = st.radio("Variant seçin:", opts, key=f"q_ans_{q[0]}",
+                                                   label_visibility="collapsed")
+                                    user_answers[q[0]] = ans
+                                    st.write("---")
 
-                            idx = st.session_state["q_index"]
-                            q = questions[idx]
+                                if st.form_submit_button("Quizi Bitir və Nəticəni Gör", type="primary",
+                                                         use_container_width=True):
+                                    correct_n = 0
+                                    wrong_n = 0
+                                    empty_n = 0
+                                    detailed_results = []
 
-                            st.markdown(f"### Sual {idx + 1} / {len(questions)}")
-                            st.write(f"**{q[1]}**")
+                                    for q in questions:
+                                        correct_letter = q[6]
+                                        u_ans_full = user_answers[q[0]]
 
-                            opts = [f"A) {q[2]}", f"B) {q[3]}", f"C) {q[4]}", f"D) {q[5]}"]
-                            curr_ans = st.session_state["user_answers"].get(q[0], None)
+                                        if u_ans_full == "Cavablandırmaq istəmirəm":
+                                            empty_n += 1
+                                            u_letter = "Boş"
+                                        else:
+                                            u_letter = u_ans_full[0]
+                                            if u_letter == correct_letter:
+                                                correct_n += 1
+                                            else:
+                                                wrong_n += 1
 
-                            sel_opt = st.radio("Seçiminizi edin:", opts,
-                                               index=opts.index(curr_ans) if curr_ans in opts else 0,
-                                               key=f"q_radio_{q[0]}")
-                            st.session_state["user_answers"][q[0]] = sel_opt
+                                        detailed_results.append({
+                                            'q_text': q[1],
+                                            'opts': {'A': q[2], 'B': q[3], 'C': q[4], 'D': q[5]},
+                                            'correct': correct_letter,
+                                            'user': u_letter
+                                        })
 
-                            col_prev, col_next = st.columns(2)
-                            with col_prev:
-                                if idx > 0 and st.button("⬅️ Əvvəlki Sual"):
-                                    st.session_state["q_index"] -= 1
+                                    total_q = len(questions)
+                                    score_perc = (correct_n / total_q) * 100 if total_q > 0 else 0
+
+                                    # Bazaya qeyd (3 günlük bloklama üçün)
+                                    try:
+                                        cur.execute("""
+                                              INSERT INTO quiz_results (username, package_id, correct_count, wrong_count, empty_count, score_percent)
+                                              VALUES (%s, %s, %s, %s, %s, %s)
+                                          """, (username, active_q_id, correct_n, wrong_n, empty_n, score_perc))
+                                        conn.commit()
+                                    except Exception as ex:
+                                        st.error(f"Nəticə yazılarkən xəta: {ex}")
+
+                                    st.session_state['quiz_submitted'] = True
+                                    st.session_state['quiz_stats'] = {
+                                        "Düzgün": correct_n, "Səhv": wrong_n, "Cavablandırılmamış": empty_n,
+                                        "Nəticə (%)": round(score_perc, 1)
+                                    }
+                                    st.session_state['quiz_details'] = detailed_results
                                     st.rerun()
-                            with col_next:
-                                if idx < len(questions) - 1 and st.button("Növbəti Sual ➡️"):
-                                    st.session_state["q_index"] += 1
-                                    st.rerun()
+
+                        # 2. TƏHLİL VƏ BAXIŞ REJİMİ
+                        else:
+                            st.success(
+                                "Təbrik edirik! Quizi bitirdiniz. Bu quiz növbəti 3 gün ərzində sizin üçün əlçatmaz olacaq.")
+
+                            st.subheader("📊 Ümumi Nəticəniz")
+                            stats = st.session_state['quiz_stats']
+                            df = pd.DataFrame([stats])
+                            st.dataframe(df, use_container_width=True, hide_index=True)
 
                             st.write("---")
-                            if st.button("🎯 Quizi Tamamla və Nəticəni Hesabla", use_container_width=True):
-                                correct_count = 0
-                                total_q = len(questions)
-                                answered_count = 0
+                            st.subheader("🔍 Suallara Baxış (Səhv və Düzlərinizin Təhlili)")
 
-                                for item in questions:
-                                    qid = item[0]
-                                    correct_letter = item[6].strip().upper()
-                                    given = st.session_state["user_answers"].get(qid, "")
-                                    if given:
-                                        answered_count += 1
-                                        if given.startswith(correct_letter):
-                                            correct_count += 1
+                            details = st.session_state['quiz_details']
+                            for idx, item in enumerate(details):
+                                st.markdown(f"**Sual {idx + 1}:** {item['q_text']}")
 
-                                st.success(
-                                    f"🎉 Quiz tamamlandı! Düzgün cavablar: {correct_count} / {total_q} (Cavablandırılmayanlar səhv sayıldı).")
-
-                                # Statistikanı bazada yeniləmək
-                                try:
-                                    conn = get_db_connection()
-                                    cur = conn.cursor()
-                                    cur.execute(
-                                        "SELECT id, quizzes_taken, total_correct, total_questions_answered FROM student_stats WHERE username = %s",
-                                        (st.session_state['username'],))
-                                    row = cur.fetchone()
-                                    if row:
-                                        cur.execute(
-                                            "UPDATE student_stats SET quizzes_taken = quizzes_taken + 1, total_correct = total_correct + %s, total_questions_answered = total_questions_answered + %s WHERE username = %s",
-                                            (correct_count, total_q, st.session_state['username']))
+                                for letter, text in item['opts'].items():
+                                    if letter == item['correct']:
+                                        st.markdown(
+                                            f"<div style='padding:10px; border-radius:5px; background-color:#dcfce7; color:#166534; margin-bottom:5px;'>✅ <b>{letter})</b> {text} (Düzgün Cavab)</div>",
+                                            unsafe_allow_html=True)
+                                    elif letter == item['user'] and item['user'] != item['correct']:
+                                        st.markdown(
+                                            f"<div style='padding:10px; border-radius:5px; background-color:#fee2e2; color:#991b1b; margin-bottom:5px;'>❌ <b>{letter})</b> {text} (Sizin Seçiminiz)</div>",
+                                            unsafe_allow_html=True)
                                     else:
-                                        cur.execute(
-                                            "INSERT INTO student_stats (username, quizzes_taken, total_correct, total_questions_answered) VALUES (%s, 1, %s, %s)",
-                                            (st.session_state['username'], correct_count, total_q))
-                                    conn.commit()
-                                    cur.close()
-                                    conn.close()
-                                except Exception as ex:
-                                    st.error(ex)
-                        else:
-                            st.info("Bu quiz paketində hələ sual yoxdur.")
-                else:
-                    st.warning("Aktiv quiz paketi mövcud deyil.")
+                                        st.markdown(
+                                            f"<div style='padding:10px; border-radius:5px; background-color:#f1f5f9; color:#475569; margin-bottom:5px;'>⚪ <b>{letter})</b> {text}</div>",
+                                            unsafe_allow_html=True)
+
+                                if item['user'] == "Boş":
+                                    st.markdown(
+                                        "<span style='color:#ea580c; font-weight:bold;'>⚠️ Siz bu sualı cavabsız buraxmısınız.</span>",
+                                        unsafe_allow_html=True)
+
+                                st.write("---")
+
+                            if st.button("Ana Səhifəyə Qayıt", use_container_width=True):
+                                st.session_state['active_quiz'] = None
+                                st.session_state['quiz_submitted'] = False
+                                st.session_state["student_page"] = "Əsas səhifə"
+                                st.rerun()
+
+                cur.close()
+                conn.close()
             except Exception as e:
-                st.error(e)
+                st.error(f"Sistem xətası: {e}")
