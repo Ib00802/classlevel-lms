@@ -439,28 +439,34 @@ else:
                                 except Exception:
                                     pass
 
-
-
-                                    # İmtahan sualları (Həm quizzes, həm də questions cədvəlini dəstəkləyən struktur)
-                                conn = get_db_connection()
-                                cur = conn.cursor()
-
-                                # Əvvəlcə yoxlayaq suallar hansı cədvəldədir
+                                # İmtahan sualları (Təmizlənmiş və xətasız sorğu)
+                                questions = []
                                 try:
-                                    cur.execute(
-                                        "SELECT id, question_text, option_a, option_b, option_c, option_d FROM questions WHERE lesson_id = %s ORDER BY id ASC",
-                                        (int(selected_lesson_id),))
-                                    questions = cur.fetchall()
-                                    if not questions:
-                                        raise Exception()
-                                except:
+                                    conn = get_db_connection()
+                                    cur = conn.cursor()
+                                    # Əvvəlki xətaların tranzaksiyanı bloklamaması üçün rollback edirik
+                                    conn.rollback()
+
                                     cur.execute(
                                         "SELECT id, question_text, option_a, option_b, option_c, option_d FROM quizzes WHERE lesson_id = %s ORDER BY id ASC",
                                         (int(selected_lesson_id),))
                                     questions = cur.fetchall()
-
-                                cur.close()
-                                conn.close()
+                                    cur.close()
+                                    conn.close()
+                                except Exception as ex:
+                                    # Əgər quizzes cədvəlində tapmasa, questions cədvəlini yoxlayaq
+                                    try:
+                                        conn = get_db_connection()
+                                        cur = conn.cursor()
+                                        conn.rollback()
+                                        cur.execute(
+                                            "SELECT id, question_text, option_a, option_b, option_c, option_d FROM questions WHERE lesson_id = %s ORDER BY id ASC",
+                                            (int(selected_lesson_id),))
+                                        questions = cur.fetchall()
+                                        cur.close()
+                                        conn.close()
+                                    except:
+                                        pass
 
                 if questions:
                     st.write("---")
