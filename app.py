@@ -313,6 +313,50 @@ else:
                 if all_packs:
                     pack_options = {p[0]: f"{p[1]} ({p[2]}-ci sinif)" for p in all_packs}
                     selected_pack_id = st.selectbox("Sual əlavə olunacaq Quizi seçin:", list(pack_options.keys()),
+                                                    format_func=lambda x: pack_options[x], key="sel_pack_for_q")
+
+                    # clear_on_submit=True xanaların avtomatik təmizlənməsini təmin edir
+                    with st.form("add_questions_form", clear_on_submit=True):
+                        q_text = st.text_area("Sual Mətni:", key="qa_text")
+                        opt_a = st.text_input("Variant A:", key="qa_a")
+                        opt_b = st.text_input("Variant B:", key="qa_b")
+                        opt_c = st.text_input("Variant C:", key="qa_c")
+                        opt_d = st.text_input("Variant D:", key="qa_d")
+                        cor_opt = st.selectbox("Düzgün Variant:", ["A", "B", "C", "D"], key="qa_cor")
+
+                        if st.form_submit_button("Bu Quizə Sualı Əlavə Et"):
+                            if q_text and opt_a and opt_b:
+                                conn = get_db_connection()
+                                cur = conn.cursor()
+                                cur.execute("""
+                                    INSERT INTO quiz_questions (package_id, question_text, option_a, option_b, option_c, option_d, correct_option)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                """, (selected_pack_id, q_text, opt_a, opt_b, opt_c, opt_d, cor_opt))
+                                conn.commit()
+                                cur.close()
+                                conn.close()
+                                st.success("Sual qrupa uğurla əlavə olundu!")
+                                st.rerun()  # Səhifəni yeniləyir ki, yeni sual üçün hazır olsun
+                            else:
+                                st.warning("Sual mətni və variantlar boş ola bilməz.")
+                else:
+                    st.info("Əvvəlcə yuxarıdan yeni quiz paketi yaradın.")
+            except Exception as e:
+                st.error(e)
+
+            # 2. Addım: Mövcud Paketlərə İstədiyiniz Qədər Sual Əlavə Etmək
+            st.markdown("### 2. Mövcud Quizə Sual Əlavə Et")
+            try:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute("SELECT id, title, class_level FROM quiz_packages ORDER BY id DESC")
+                all_packs = cur.fetchall()
+                cur.close()
+                conn.close()
+
+                if all_packs:
+                    pack_options = {p[0]: f"{p[1]} ({p[2]}-ci sinif)" for p in all_packs}
+                    selected_pack_id = st.selectbox("Sual əlavə olunacaq Quizi seçin:", list(pack_options.keys()),
                                                     format_func=lambda x: pack_options[x])
 
                     with st.form("add_questions_form"):
