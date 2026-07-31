@@ -52,7 +52,7 @@ def init_db():
             )
         """)
 
-        # Materiallar cədvəli (Standartlar və Linklər ilə)
+        # Materiallar cədvəli
         cur.execute("""
             CREATE TABLE IF NOT EXISTS materials (
                 id SERIAL PRIMARY KEY,
@@ -65,8 +65,13 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # Mövcud cədvəllər üçün sütunların yoxlanılıb əlavə edilməsi (Miqrasiya)
+        cur.execute("ALTER TABLE materials ADD COLUMN IF NOT EXISTS file_link TEXT;")
+        cur.execute("ALTER TABLE materials ADD COLUMN IF NOT EXISTS video_link TEXT;")
+        cur.execute("ALTER TABLE materials ADD COLUMN IF NOT EXISTS content_standard VARCHAR(100);")
+        cur.execute("ALTER TABLE materials ADD COLUMN IF NOT EXISTS sub_standard VARCHAR(100);")
 
-        # Quiz paketləri cədvəli (Çətinlik və Müddət ilə)
+        # Quiz paketləri cədvəli
         cur.execute("""
             CREATE TABLE IF NOT EXISTS quiz_packages (
                 id SERIAL PRIMARY KEY,
@@ -77,6 +82,8 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        cur.execute("ALTER TABLE quiz_packages ADD COLUMN IF NOT EXISTS difficulty_level VARCHAR(50);")
+        cur.execute("ALTER TABLE quiz_packages ADD COLUMN IF NOT EXISTS time_limit INT;")
 
         # Suallar cədvəli
         cur.execute("""
@@ -133,7 +140,6 @@ if st.session_state.user is None:
 
             if st.button("Daxil Ol", use_container_width=True):
                 if username and password:
-                    # Admin fallback yoxlaması
                     if username.strip() == "admin" and password.strip() == "Muellim2026!":
                         st.session_state.user = {
                             "id": 0,
@@ -196,15 +202,16 @@ if st.session_state.user is None:
                         conn.close()
                         st.success("Qeydiyyat uğurla tamamlandı! İndi daxil ola bilərsiniz.")
                     except Exception as e:
-                        st.error(f"Qeydiyyat zamanı xəta (İstifadəçi adı artıq mövcud ola bilər): {e}")
+                        st.error(f"Qeydiyyat zamanı xəta: {e}")
                 else:
                     st.warning("Zəhmət olmasa tələb olunan xanaları doldurun.")
+
 # ==========================================
 # İSTİFADƏÇİ SİSTEMƏ DAXİL OLDUQDAN SONRA
 # ==========================================
 else:
     # --------------------------------------
-    # HİSSƏ A: MÜƏLLİM İDARƏETMƏ PANELİ
+    # MÜƏLLİM İDARƏETMƏ PANELİ
     # --------------------------------------
     if st.session_state.user["role"] == "teacher":
         st.title("👨‍🏫 Müəllim İdarəetmə Paneli")
@@ -218,7 +225,6 @@ else:
 
         m_t1, m_t2, m_t3 = st.tabs(["👥 Şagirdlər", "📚 Materiallar (Standart və Linklər)", "📝 Quiz Paketi və Suallar"])
 
-        # --- TAB 1: ŞAGİRD LİSTİ ---
         with m_t1:
             st.subheader("👥 Qeydiyyatdan Keçmiş Şagirdlər")
             try:
@@ -239,7 +245,6 @@ else:
             except Exception as e:
                 st.error(f"Şagird siyahısı yüklənərkən xəta yarandı: {e}")
 
-        # --- TAB 2: MATERİALLAR (PDF, VİDEO, STANDARTLAR) ---
         with m_t2:
             st.subheader("📚 Dərs Materiallarının Yerləşdirilməsi")
 
@@ -247,8 +252,8 @@ else:
                 st.markdown("### ➕ Yeni Material Əlavə Et")
                 mat_title = st.text_input("Mövzunun Adı:")
                 mat_class = st.selectbox("Sinif:", list(range(1, 12)), index=8, key="mat_cl_full")
-                mat_file = st.text_input("PDF / Fayl Linki (Google Drive və s.):")
-                mat_video = st.text_input("Video Dərs Linki (YouTube və s.):")
+                mat_file = st.text_input("PDF / Fayl Linki:")
+                mat_video = st.text_input("Video Dərs Linki:")
                 mat_content_std = st.text_input("Məzmun Standartı (məs: 2.1.1.):")
                 mat_sub_std = st.text_input("Alt Standart (məs: 2.1.3.):")
 
@@ -292,7 +297,6 @@ else:
             except Exception as e:
                 st.error(f"Xəta: {e}")
 
-        # --- TAB 3: QUİZ PAKETİ VƏ SUALLAR ---
         with m_t3:
             st.subheader("📝 Quiz Paketi və Sualların İdarə Edilməsi")
 
@@ -300,7 +304,7 @@ else:
 
             with sub_t1:
                 with st.form("create_quiz_pkg_complete"):
-                    pkg_title = st.text_input("Quiz Paketinin Adı (məs: 9-cu Sinif Riyaziyyat Sınaq 1):")
+                    pkg_title = st.text_input("Quiz Paketinin Adı:")
                     pkg_class = st.selectbox("Aid Olduğu Sinif:", list(range(1, 12)), index=8, key="pkg_cl_full")
                     pkg_difficulty = st.selectbox("Çətinlik Səviyyəsi:", ["Asan", "Orta", "Çətin"])
                     pkg_time = st.number_input("İşləmə Müddəti (dəqiqə ilə):", min_value=1, max_value=180, value=30)
@@ -317,7 +321,7 @@ else:
                                 conn.commit()
                                 cur.close()
                                 conn.close()
-                                st.success("Quiz paketi uğurla yaradıldı! İndi suallar əlavə edə bilərsiniz.")
+                                st.success("Quiz paketi uğurla yaradıldı!")
                             except Exception as e:
                                 st.error(f"Xəta: {e}")
                         else:
@@ -363,8 +367,7 @@ else:
                                         conn.commit()
                                         cur.close()
                                         conn.close()
-                                        st.success(
-                                            "Sual paketə uğurla əlavə olundu! Başqa sual da əlavə edə bilərsiniz.")
+                                        st.success("Sual paketə uğurla əlavə olundu!")
                                     except Exception as e:
                                         st.error(f"Xəta: {e}")
                                 else:
@@ -373,7 +376,7 @@ else:
                     st.error(f"Xəta: {e}")
 
     # --------------------------------------
-    # HİSSƏ B: ŞAGİRD PANELİ
+    # ŞAGİRD PANELİ
     # --------------------------------------
     elif st.session_state.user["role"] == "student":
         student_class = st.session_state.user.get("class_level", 9)
@@ -393,7 +396,6 @@ else:
             st.session_state.user = None
             st.rerun()
 
-        # --- 1. SCORE BOARD ---
         if s_menu == "🏠 Əsas Səhifə / Score Board":
             st.header("🏠 Xoş Gəldiniz!")
             st.write(f"Salam, **{st.session_state.user['full_name']}**!")
@@ -421,9 +423,8 @@ else:
                 else:
                     st.info("Hələ ki heç bir nəticə qeydə alınmayıb.")
             except Exception as e:
-                st.info("Liderlər lövhəsi yüklənir.")
+                st.info("Liderlər lövhəsi yenilənir.")
 
-        # --- 2. DƏRS MATERİALLARI (ŞAGİRD GÖRÜNÜŞÜ) ---
         elif s_menu == "📚 Dərs Materialları":
             st.header("📚 Dərs Materialları")
             st.write(f"**{student_class}-cı sinif** üçün əlçatan dərs materialları:")
@@ -463,7 +464,6 @@ else:
             except Exception as e:
                 st.error(f"Xəta: {e}")
 
-        # --- 3. QUİZLƏR VƏ İMTAHANLAR (XƏTASIZ İŞLƏMƏ) ---
         elif s_menu == "📝 Quizlər və İmtahanlar":
             st.header("📝 Quizlər və İmtahanlar")
 
@@ -517,8 +517,7 @@ else:
                                     f"D) {opt_d}": "D"
                                 }
 
-                                choice = st.radio(f"Cavab ({idx}):", list(options.keys()), key=f"q_key_{q_id}",
-                                                  label_visibility="collapsed")
+                                choice = st.radio(f"Cavab ({idx}):", list(options.keys()), key=f"q_key_{q_id}", label_visibility="collapsed")
                                 user_answers[q_id] = (options[choice], corr)
                                 st.write("---")
 
@@ -543,8 +542,7 @@ else:
                                     cur.close()
                                     conn.close()
                                     st.balloons()
-                                    st.success(
-                                        f"İmtahan başa çatdı! Nəticəniz: {final_score}% ({total_q} sualdan {score} düzgün)")
+                                    st.success(f"İmtahan başa çatdı! Nəticəniz: {final_score}% ({total_q} sualdan {score} düzgün)")
                                 except Exception as e:
                                     st.error(f"Nəticə yadda saxlanılarkən xəta: {e}")
             except Exception as e:
