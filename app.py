@@ -39,7 +39,7 @@ def init_db():
         conn = get_db_connection()
         cur = conn.cursor()
 
-        # İstifadəçilər cədvəli
+        # 1. İstifadəçilər cədvəli
         cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -51,8 +51,10 @@ def init_db():
                 class_level INT
             )
         """)
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS student_code VARCHAR(50);")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS class_level INT;")
 
-        # Materiallar cədvəli
+        # 2. Materiallar cədvəli
         cur.execute("""
             CREATE TABLE IF NOT EXISTS materials (
                 id SERIAL PRIMARY KEY,
@@ -65,13 +67,12 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        # Mövcud cədvəllər üçün sütunların yoxlanılıb əlavə edilməsi (Miqrasiya)
         cur.execute("ALTER TABLE materials ADD COLUMN IF NOT EXISTS file_link TEXT;")
         cur.execute("ALTER TABLE materials ADD COLUMN IF NOT EXISTS video_link TEXT;")
         cur.execute("ALTER TABLE materials ADD COLUMN IF NOT EXISTS content_standard VARCHAR(100);")
         cur.execute("ALTER TABLE materials ADD COLUMN IF NOT EXISTS sub_standard VARCHAR(100);")
 
-        # Quiz paketləri cədvəli
+        # 3. Quiz paketləri cədvəli
         cur.execute("""
             CREATE TABLE IF NOT EXISTS quiz_packages (
                 id SERIAL PRIMARY KEY,
@@ -85,7 +86,7 @@ def init_db():
         cur.execute("ALTER TABLE quiz_packages ADD COLUMN IF NOT EXISTS difficulty_level VARCHAR(50);")
         cur.execute("ALTER TABLE quiz_packages ADD COLUMN IF NOT EXISTS time_limit INT;")
 
-        # Suallar cədvəli
+        # 4. Suallar cədvəli
         cur.execute("""
             CREATE TABLE IF NOT EXISTS quizzes (
                 id SERIAL PRIMARY KEY,
@@ -98,8 +99,15 @@ def init_db():
                 correct_option VARCHAR(5)
             )
         """)
+        cur.execute("ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS quiz_package_id INT;")
+        cur.execute("ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS question_text TEXT;")
+        cur.execute("ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS option_a TEXT;")
+        cur.execute("ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS option_b TEXT;")
+        cur.execute("ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS option_c TEXT;")
+        cur.execute("ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS option_d TEXT;")
+        cur.execute("ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS correct_option VARCHAR(5);")
 
-        # Nəticələr cədvəli
+        # 5. Nəticələr cədvəli
         cur.execute("""
             CREATE TABLE IF NOT EXISTS quiz_results (
                 id SERIAL PRIMARY KEY,
@@ -109,6 +117,9 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        cur.execute("ALTER TABLE quiz_results ADD COLUMN IF NOT EXISTS student_id INT;")
+        cur.execute("ALTER TABLE quiz_results ADD COLUMN IF NOT EXISTS package_id INT;")
+        cur.execute("ALTER TABLE quiz_results ADD COLUMN IF NOT EXISTS score FLOAT;")
 
         conn.commit()
         cur.close()
@@ -205,7 +216,6 @@ if st.session_state.user is None:
                         st.error(f"Qeydiyyat zamanı xəta: {e}")
                 else:
                     st.warning("Zəhmət olmasa tələb olunan xanaları doldurun.")
-
 # ==========================================
 # İSTİFADƏÇİ SİSTEMƏ DAXİL OLDUQDAN SONRA
 # ==========================================
@@ -517,7 +527,8 @@ else:
                                     f"D) {opt_d}": "D"
                                 }
 
-                                choice = st.radio(f"Cavab ({idx}):", list(options.keys()), key=f"q_key_{q_id}", label_visibility="collapsed")
+                                choice = st.radio(f"Cavab ({idx}):", list(options.keys()), key=f"q_key_{q_id}",
+                                                  label_visibility="collapsed")
                                 user_answers[q_id] = (options[choice], corr)
                                 st.write("---")
 
@@ -542,7 +553,8 @@ else:
                                     cur.close()
                                     conn.close()
                                     st.balloons()
-                                    st.success(f"İmtahan başa çatdı! Nəticəniz: {final_score}% ({total_q} sualdan {score} düzgün)")
+                                    st.success(
+                                        f"İmtahan başa çatdı! Nəticəniz: {final_score}% ({total_q} sualdan {score} düzgün)")
                                 except Exception as e:
                                     st.error(f"Nəticə yadda saxlanılarkən xəta: {e}")
             except Exception as e:
