@@ -164,11 +164,91 @@ else:
         st.header("Müəllim İdarəetmə Paneli")
         m_t1, m_t2, m_t3 = st.tabs(["👥 Şagirdlər", "📚 Materiallar", "📝 Quiz Paketi Yarat"])
 
-        # (Sizin köhnə m_t1 və m_t2 kodlarınız bura gələcək)
+        # --- 1-Cİ TAB: ŞAGİRDLƏRİN SİYAHISI VƏ İDARƏSİ ---
         with m_t1:
-            st.write("Şagirdlərin siyahısı və idarəedilməsi.")
+            st.subheader("👥 Qeydiyyatdan Keçmiş Şagirdlər")
+            try:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT id, full_name, username, student_code, class_level FROM users WHERE role = 'student' ORDER BY class_level, full_name")
+                students_data = cur.fetchall()
+                cur.close()
+                conn.close()
+
+                if students_data:
+                    df_students = pd.DataFrame(students_data,
+                                               columns=["ID", "Ad Soyad", "İstifadəçi Adı", "Şagird Kodu", "Sinif"])
+                    st.dataframe(df_students, use_container_width=True, hide_index=True)
+                else:
+                    st.info("Hələ ki sistemdə qeydiyyatdan keçmiş şagird yoxdur.")
+            except Exception as e:
+                st.error(f"Şagird siyahısı yüklənərkən xəta yarandı: {e}")
+
+        # --- 2-Cİ TAB: DƏRS MATERİALLARININ ƏLAVƏ EDİLMƏSİ VƏ SİYAHISI ---
         with m_t2:
-            st.write("Dərs materiallarının yüklənməsi.")
+            st.subheader("📚 Dərs Materiallarının İdarə Edilməsi")
+
+            # Materiallar cədvəlinin varlığını yoxlamaq/yaradılması
+            try:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute("""
+                            CREATE TABLE IF NOT EXISTS materials (
+                                id SERIAL PRIMARY KEY,
+                                title VARCHAR(255),
+                                class_level INT,
+                                file_link TEXT,
+                                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                            )
+                        """)
+                conn.commit()
+                cur.close()
+                conn.close()
+            except Exception as e:
+                pass
+
+            # Material Əlavə Etmə Forması
+            with st.form("add_material_form", clear_on_submit=True):
+                st.markdown("### ➕ Yeni Material Əlavə Et")
+                mat_title = st.text_input("Materialın Adı / Mövzu:")
+                mat_class = st.selectbox("Sinif:", list(range(1, 12)), index=8, key="mat_cl")
+                mat_link = st.text_input("Material Linki (Google Drive, PDF URL və s.):")
+
+                if st.form_submit_button("Materialı Yüklə"):
+                    if mat_title and mat_link:
+                        try:
+                            conn = get_db_connection()
+                            cur = conn.cursor()
+                            cur.execute("INSERT INTO materials (title, class_level, file_link) VALUES (%s, %s, %s)",
+                                        (mat_title.strip(), int(mat_class), mat_link.strip()))
+                            conn.commit()
+                            cur.close()
+                            conn.close()
+                            st.success("Material uğurla əlavə olundu!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Xəta: {e}")
+                    else:
+                        st.warning("Zəhmət olmasa materialın adını və linkini daxil edin.")
+
+            st.write("---")
+            st.markdown("### 📋 Yüklənmiş Materiallar")
+            try:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute("SELECT id, title, class_level, file_link FROM materials ORDER BY class_level, id DESC")
+                mats = cur.fetchall()
+                cur.close()
+                conn.close()
+
+                if mats:
+                    df_mats = pd.DataFrame(mats, columns=["ID", "Mövzu / Başlıq", "Sinif", "Keçid Linki"])
+                    st.dataframe(df_mats, use_container_width=True, hide_index=True)
+                else:
+                    st.info("Hələ ki heç bir material əlavə olunmayıb.")
+            except Exception as e:
+                st.error(f"Materiallar yüklənərkən xəta yarandı: {e}")
 
         with m_t3:
             st.subheader("Quiz Paketi və Sualların Tərtibi")
