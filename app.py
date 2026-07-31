@@ -11,10 +11,11 @@ st.set_page_config(page_title="ClassLevel LMS", page_icon="🎓", layout="wide")
 # QEYD: Bura öz PostgreSQL məlumatlarınızı daxil edin
 def get_db_connection():
     return psycopg2.connect(
-        host="localhost",
-        database="your_database_name",
-        user="your_db_user",
-        password="your_db_password"
+        host=st.secrets["postgres"]["host"],
+        database=st.secrets["postgres"]["database"],
+        user=st.secrets["postgres"]["user"],
+        password=st.secrets["postgres"]["password"],
+        port=st.secrets["postgres"]["port"]
     )
 
 
