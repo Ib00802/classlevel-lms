@@ -269,38 +269,78 @@ else:
                         st.error(e)
 
         with m_t3:
-            st.subheader("Quiz Paketi və Sualları Tərtib Et")
-            with st.form("q_pack_form"):
-                q_class = st.selectbox("Hansı Sinif Üçün?", list(range(1, 12)), index=8, key="qp_cl")
-                q_title = st.text_input("Quiz Adı (Məsələn: Quiz 1 - Riyaziyyat Giriş):")
-                q_diff = st.selectbox("Çətinlik Səviyyəsi:", ["Asan", "Orta", "Çətin"])
-                q_dur = st.number_input("Vaxt (dəqiqə ilə):", min_value=1, value=10)
+            st.subheader("Quiz Paketi və Sualların Tərtibi")
 
-                st.markdown("--- **Suallar:**")
-                q_text = st.text_area("Sual Mətni:")
-                opt_a = st.text_input("Variant A:")
-                opt_b = st.text_input("Variant B:")
-                opt_c = st.text_input("Variant C:")
-                opt_d = st.text_input("Variant D:")
-                cor_opt = st.selectbox("Düzgün Variant:", ["A", "B", "C", "D"])
+            # 1. Addım: Yeni Quiz Paketi Yaratmaq
+            with st.form("new_pack_form"):
+                st.markdown("### 1. Yeni Quiz Paketi Başlığı Yarat")
+                qp_class = st.selectbox("Hansı Sinif Üçün?", list(range(1, 12)), index=8, key="qp_cl_new")
+                qp_title = st.text_input("Quiz Adı (Məsələn: Quiz 1 - İnformatika Giriş):")
+                qp_diff = st.selectbox("Çətinlik Səviyyəsi:", ["Asan", "Orta", "Çətin"], key="qp_df_new")
+                qp_dur = st.number_input("Ümumi Vaxt (dəqiqə ilə):", min_value=1, value=10, key="qp_dr_new")
 
-                if st.form_submit_button("Quiz Paketini və Sualı Yadda Saxla"):
-                    try:
-                        conn = get_db_connection()
-                        cur = conn.cursor()
-                        cur.execute(
-                            "INSERT INTO quiz_packages (class_level, title, difficulty, duration_minutes) VALUES (%s, %s, %s, %s) RETURNING id",
-                            (q_class, q_title, q_diff, int(q_dur)))
-                        pack_id = cur.fetchone()[0]
-                        cur.execute(
-                            "INSERT INTO quiz_questions (package_id, question_text, option_a, option_b, option_c, option_d, correct_option) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                            (pack_id, q_text, opt_a, opt_b, opt_c, opt_d, cor_opt))
-                        conn.commit()
-                        cur.close()
-                        conn.close()
-                        st.success("Quiz və Sual uğurla əlavə olundu!")
-                    except Exception as e:
-                        st.error(e)
+                if st.form_submit_button("Yeni Quiz Paketi Əlavə Et"):
+                    if qp_title:
+                        try:
+                            conn = get_db_connection()
+                            cur = conn.cursor()
+                            cur.execute(
+                                "INSERT INTO quiz_packages (class_level, title, difficulty, duration_minutes) VALUES (%s, %s, %s, %s)",
+                                (qp_class, qp_title, qp_diff, int(qp_dur)))
+                            conn.commit()
+                            cur.close()
+                            conn.close()
+                            st.success(
+                                "Quiz paketi yaradıldı! İndi aşağıdan həmin sazişə suallar əlavə edə bilərsiniz.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(e)
+                    else:
+                        st.warning("Zəhmət olmasa quiz adını daxil edin.")
+
+            st.write("---")
+
+            # 2. Addım: Mövcud Paketlərə İstədiyiniz Qədər Sual Əlavə Etmək
+            st.markdown("### 2. Mövcud Quizə Sual Əlavə Et")
+            try:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute("SELECT id, title, class_level FROM quiz_packages ORDER BY id DESC")
+                all_packs = cur.fetchall()
+                cur.close()
+                conn.close()
+
+                if all_packs:
+                    pack_options = {p[0]: f"{p[1]} ({p[2]}-ci sinif)" for p in all_packs}
+                    selected_pack_id = st.selectbox("Sual əlavə olunacaq Quizi seçin:", list(pack_options.keys()),
+                                                    format_func=lambda x: pack_options[x])
+
+                    with st.form("add_questions_form"):
+                        q_text = st.text_area("Sual Mətni:")
+                        opt_a = st.text_input("Variant A:", key="qa_a")
+                        opt_b = st.text_input("Variant B:", key="qa_b")
+                        opt_c = st.text_input("Variant C:", key="qa_c")
+                        opt_d = st.text_input("Variant D:", key="qa_d")
+                        cor_opt = st.selectbox("Düzgün Variant:", ["A", "B", "C", "D"], key="qa_cor")
+
+                        if st.form_submit_button("Bu Quizə Sualı Əlavə Et"):
+                            if q_text and opt_a and opt_b:
+                                conn = get_db_connection()
+                                cur = conn.cursor()
+                                cur.execute("""
+                                    INSERT INTO quiz_questions (package_id, question_text, option_a, option_b, option_c, option_d, correct_option)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                """, (selected_pack_id, q_text, opt_a, opt_b, opt_c, opt_d, cor_opt))
+                                conn.commit()
+                                cur.close()
+                                conn.close()
+                                st.success("Sual qrupa uğurla əlavə olundu! Başqa sual da əlavə edə bilərsiniz.")
+                            else:
+                                st.warning("Sual mətni və variantlar boş ola bilməz.")
+                else:
+                    st.info("Əvvəlcə yuxarıdan yeni quiz paketi yaradın.")
+            except Exception as e:
+                st.error(e)
 
     # --- ŞAGİRD PANELİ ---
     else:
