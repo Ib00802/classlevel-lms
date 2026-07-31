@@ -439,34 +439,27 @@ else:
                                 except Exception:
                                     pass
 
-                                # İmtahan sualları (Təmizlənmiş və xətasız sorğu)
-                                questions = []
-                                try:
-                                    conn = get_db_connection()
-                                    cur = conn.cursor()
-                                    # Əvvəlki xətaların tranzaksiyanı bloklamaması üçün rollback edirik
-                                    conn.rollback()
 
-                                    cur.execute(
-                                        "SELECT id, question_text, option_a, option_b, option_c, option_d FROM quizzes WHERE lesson_id = %s ORDER BY id ASC",
-                                        (int(selected_lesson_id),))
-                                    questions = cur.fetchall()
-                                    cur.close()
-                                    conn.close()
-                                except Exception as ex:
-                                    # Əgər quizzes cədvəlində tapmasa, questions cədvəlini yoxlayaq
+                                    # İmtahan sualları (Şagirdin sinfinə uyğun olaraq questions cədvəlindən çəkilir)
+                                    questions = []
                                     try:
                                         conn = get_db_connection()
                                         cur = conn.cursor()
                                         conn.rollback()
-                                        cur.execute(
-                                            "SELECT id, question_text, option_a, option_b, option_c, option_d FROM questions WHERE lesson_id = %s ORDER BY id ASC",
-                                            (int(selected_lesson_id),))
+
+                                        # 4-cü şəkildəki questions cədvəlinin strukturuna uyğun olaraq class_level ilə çəkirik
+                                        cur.execute("""
+                                                        SELECT id, question_text, option_a, option_b, option_c, option_d 
+                                                        FROM questions 
+                                                        WHERE class_level = %s 
+                                                        ORDER BY id ASC
+                                                    """, (int(st.session_state['class_level']),))
+
                                         questions = cur.fetchall()
                                         cur.close()
                                         conn.close()
-                                    except:
-                                        pass
+                                    except Exception as ex:
+                                        st.error(f"Suallar yüklənərkən xəta: {ex}")
 
                 if questions:
                     st.write("---")
