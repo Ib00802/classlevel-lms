@@ -23,7 +23,6 @@ try:
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # 1. İstifadəçilər Cədvəli
     cur.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -37,7 +36,6 @@ try:
     );
     """)
 
-    # 2. Dərslər Cədvəli
     cur.execute("""
     CREATE TABLE IF NOT EXISTS lessons (
         id SERIAL PRIMARY KEY,
@@ -58,7 +56,6 @@ try:
     cur.execute("ALTER TABLE lessons ADD COLUMN IF NOT EXISTS file_url TEXT;")
     cur.execute("ALTER TABLE lessons ADD COLUMN IF NOT EXISTS video_url TEXT;")
 
-    # 3. Quizlər Cədvəli
     cur.execute("""
     CREATE TABLE IF NOT EXISTS quizzes (
         id SERIAL PRIMARY KEY,
@@ -78,7 +75,6 @@ try:
     except Exception:
         pass
 
-    # Sabit Admin Hesabı
     admin_user = "admin"
     admin_pass = make_hashes("Muellim2026")
     cur.execute("SELECT id FROM users WHERE username = %s", (admin_user,))
@@ -138,7 +134,8 @@ if not st.session_state["logged_in"]:
                             st.session_state["username"] = db_user
                             st.session_state["full_name"] = db_name
                             st.session_state["user_role"] = db_role
-                            st.session_state["class_level"] = db_class
+                            st.session_state["class_level"] = int(db_class) if db_class else 5
+
                             st.success(f"Xoş gəldiniz, {db_name}!")
                             st.rerun()
                         else:
@@ -198,10 +195,11 @@ if not st.session_state["logged_in"]:
                     except Exception as ex:
                         st.error(f"Qeydiyyat xətası: {ex}")
             else:
-                st.warning("Lütfən bütün xanaları doldurun.")
-    # ==========================================
-    # MƏRHƏLƏ 2: DAXİL OLDUQDAN SONRAKİ PANELLƏR
-    # ==========================================
+                st.warning("Zəhmət olmasa bütün xanaları doldurun.")
+# ==========================================
+# MƏRHƏLƏ 2: YALNIZ GİRİŞ EDİLDİKDƏ GÖRÜNƏN PANEL
+# ==========================================
+else:
     st.sidebar.title(f"👤 {st.session_state['full_name']}")
 
     user_class = st.session_state.get('class_level', 5)
@@ -212,6 +210,8 @@ if not st.session_state["logged_in"]:
         st.session_state["logged_in"] = False
         st.session_state["username"] = ""
         st.session_state["user_role"] = ""
+        st.session_state["full_name"] = ""
+        st.session_state["class_level"] = 5
         st.rerun()
 
     # ------------------------------------------
@@ -276,9 +276,9 @@ if not st.session_state["logged_in"]:
                             conn = get_db_connection()
                             cur = conn.cursor()
                             cur.execute("""
-                                    INSERT INTO lessons (title, class_level, content, main_standard, sub_standard, file_url, video_url) 
-                                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                                """, (
+                                INSERT INTO lessons (title, class_level, content, main_standard, sub_standard, file_url, video_url) 
+                                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            """, (
                                 lesson_title.strip(),
                                 target_class,
                                 lesson_content.strip(),
@@ -296,7 +296,6 @@ if not st.session_state["logged_in"]:
                     else:
                         st.warning("Lütfən dərsin adını daxil edin.")
 
-        # TAB 3: YENİLƏNMİŞ SUAL YARATMA PANELİ (AVTOMATİK TƏMİZLƏNMƏ VƏ SAYĞAC İLƏ)
         with m_tab3:
             st.subheader("❓ Dərslərə Uyğun İmtahan Sualı Yarat")
             try:
@@ -312,7 +311,6 @@ if not st.session_state["logged_in"]:
                     q_lesson_id = st.selectbox("Sual hansı dərsə aid olsun?", list(l_dict.keys()),
                                                format_func=lambda x: l_dict[x])
 
-                    # Seçilən dərs üzrə mövcud sualların sayını öyrənək
                     conn = get_db_connection()
                     cur = conn.cursor()
                     cur.execute("SELECT COUNT(*) FROM quizzes WHERE lesson_id = %s", (int(q_lesson_id),))
@@ -322,7 +320,7 @@ if not st.session_state["logged_in"]:
 
                     next_q_num = current_q_count + 1
                     st.info(
-                        f"💡 Hər dəfə düyməni sıxdıqda xanalar təmizlənəcək. **Hazırda hazırlanacaq sual: Sual Nə {next_q_num}** (Mövcud sual sayı: {current_q_count})")
+                        f"💡 Hər dəfə düyməni sıxdıqda xanalar təmizlənəcək. **Hazırda hazırlanacaq sual: Sual № {next_q_num}** (Mövcud sual sayı: {current_q_count})")
 
                     with st.form("add_quiz_form", clear_on_submit=True):
                         q_text = st.text_area(f"Sual {next_q_num} mətni:")
@@ -340,33 +338,32 @@ if not st.session_state["logged_in"]:
                                     cur = conn.cursor()
 
                                     cur.execute("""
-                                            SELECT column_name FROM information_schema.columns 
-                                            WHERE table_name='quizzes' AND column_name='quiz_title';
-                                        """)
+                                        SELECT column_name FROM information_schema.columns 
+                                        WHERE table_name='quizzes' AND column_name='quiz_title';
+                                    """)
                                     has_quiz_title = cur.fetchone()
 
                                     selected_title = l_dict[q_lesson_id]
 
                                     if has_quiz_title:
                                         cur.execute("""
-                                                INSERT INTO quizzes (lesson_id, quiz_title, question_text, option_a, option_b, option_c, option_d, correct_option)
-                                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                                            """, (
+                                            INSERT INTO quizzes (lesson_id, quiz_title, question_text, option_a, option_b, option_c, option_d, correct_option)
+                                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                        """, (
                                         int(q_lesson_id), selected_title, q_text.strip(), op_a.strip(), op_b.strip(),
                                         op_c.strip(), op_d.strip(), correct_op))
                                     else:
                                         cur.execute("""
-                                                INSERT INTO quizzes (lesson_id, question_text, option_a, option_b, option_c, option_d, correct_option)
-                                                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                                            """, (
+                                            INSERT INTO quizzes (lesson_id, question_text, option_a, option_b, option_c, option_d, correct_option)
+                                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                        """, (
                                         int(q_lesson_id), q_text.strip(), op_a.strip(), op_b.strip(), op_c.strip(),
                                         op_d.strip(), correct_op))
 
                                     conn.commit()
                                     cur.close()
                                     conn.close()
-                                    st.success(
-                                        f"🎉 Sual {next_q_num} uğurla əlavə olundu! Xanalar təmizləndi, yeni sualınızı daxil edə bilərsiniz.")
+                                    st.success(f"🎉 Sual {next_q_num} uğurla əlavə olundu!")
                                     st.rerun()
                                 except Exception as ex:
                                     st.error(f"Sual əlavə edilərkən xəta: {ex}")
@@ -378,7 +375,7 @@ if not st.session_state["logged_in"]:
                 st.error(f"Dərslər yüklənərkən xəta: {ex}")
 
     # ------------------------------------------
-    # B) ŞAGİRD USER PANELİ (SUALLARIN DƏQİQ GÖRÜNMƏSİ İLƏ)
+    # B) ŞAGİRD USER PANELİ
     # ------------------------------------------
     else:
         st.title(f"📖 Şagird İmtahan Portalı ({st.session_state['class_level']}-ci Sinif)")
@@ -387,9 +384,9 @@ if not st.session_state["logged_in"]:
             conn = get_db_connection()
             cur = conn.cursor()
             cur.execute("""
-                    SELECT id, title, content, main_standard, sub_standard, file_url, video_url 
-                    FROM lessons WHERE class_level = %s ORDER BY id DESC
-                """, (st.session_state['class_level'],))
+                SELECT id, title, content, main_standard, sub_standard, file_url, video_url 
+                FROM lessons WHERE class_level = %s ORDER BY id DESC
+            """, (st.session_state['class_level'],))
             available_lessons = cur.fetchall()
             cur.close()
             conn.close()
@@ -442,7 +439,7 @@ if not st.session_state["logged_in"]:
                                 except Exception:
                                     pass
 
-                # İmtahan suallarının dərsin ID-sinə əsasən tam uyğun çəkilməsi
+                # İmtahan sualları
                 conn = get_db_connection()
                 cur = conn.cursor()
                 cur.execute(
