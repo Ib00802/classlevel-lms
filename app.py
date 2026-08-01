@@ -710,19 +710,27 @@ else:
                             for q_id, (ans, corr) in user_answers.items():
                                 if ans == corr:
                                     score += 1
+
                             final_score = round((score / total_q) * 100, 1) if total_q > 0 else 0
-                            # Daxil olan şagirdin məlumatları
+
+                            # Daxil olan şagirdin və quizin məlumatları
                             student_id = st.session_state.user['id']
                             student_name = st.session_state.user['full_name']
                             student_class = st.session_state.user['class_level']
+
+                            # Seçilən quizin tam adını əldə edirik
+                            quiz_title = selected_pkg_title
+
                             conn = get_db_connection()
                             if conn:
                                 try:
                                     with conn.cursor() as cur:
                                         cur.execute("""
-                                            INSERT INTO quiz_results (student_id, student_name, package_id, score, class_level) 
-                                            VALUES (%s, %s, %s, %s, %s)
-                                        """, (student_id, student_name, selected_pkg_id, final_score, student_class))
+                                                                    INSERT INTO quiz_results (student_id, student_name, class_level, package_id, quiz_title, score) 
+                                                                    VALUES (%s, %s, %s, %s, %s, %s)
+                                                                """, (
+                                        student_id, student_name, student_class, selected_pkg_id, quiz_title,
+                                        final_score))
                                     conn.commit()
                                     st.balloons()
                                     st.success(
