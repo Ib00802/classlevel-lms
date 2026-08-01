@@ -6,6 +6,7 @@ import streamlit as st
 # ---------------------------------------------------------
 # DATABASE CONNECTION
 # ---------------------------------------------------------
+# Secrets-dən oxunur, yoxdursa birbaşa təyin edilən DB_URL-ə düşür
 DB_URL = st.secrets.get("DB_URL", "postgresql://postgres:password@localhost:5432/postgres")
 
 
@@ -232,7 +233,7 @@ else:
                         conn.close()
 
         # -----------------------------------------------------
-        # 3. QUİZLƏR VƏ SUALLAR (XƏTA HƏLL OLUNMUŞ HİSSƏ)
+        # 3. QUİZLƏR VƏ SUALLAR
         # -----------------------------------------------------
         elif t_menu == "📋 Quizlər və Suallar":
             st.header("📋 Quiz Paketi və Sual İdarəetməsi")
@@ -397,7 +398,7 @@ else:
                     conn.close()
 
         # -----------------------------------------------------
-        # 3. STUDENT QUIZZES (XƏTA HƏLL OLUNMUŞ HİSSƏ)
+        # 3. STUDENT QUIZZES
         # -----------------------------------------------------
         elif s_menu == "📝 Quizlər və İmtahanlar":
             st.header("📝 İmtahanlar və Testlər")
