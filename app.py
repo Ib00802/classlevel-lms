@@ -705,13 +705,14 @@ else:
                             st.markdown("---")
                         submitted = st.form_submit_button("İmtahanı Tamamla və Nəticəni Gör")
                         if submitted:
-                            score = 0
+                            correct_answers_count = 0
                             total_q = len(questions)
                             for q_id, (ans, corr) in user_answers.items():
                                 if ans == corr:
-                                    score += 1
+                                    correct_answers_count += 1
 
-                            final_score = round((score / total_q) * 100, 1) if total_q > 0 else 0
+                            # Faiz hesablannır
+                            percentage_score = round((correct_answers_count / total_q) * 100, 1) if total_q > 0 else 0
 
                             # Daxil olan şagirdin və quizin məlumatları
                             student_id = st.session_state.user['id']
@@ -723,6 +724,7 @@ else:
                             if conn:
                                 try:
                                     with conn.cursor() as cur:
+                                        # Bazanın tam gözlədiyi sütun adları:
                                         cur.execute("""
                                                                     INSERT INTO quiz_results (
                                                                         student_id, 
@@ -731,22 +733,24 @@ else:
                                                                         quiz_title, 
                                                                         score, 
                                                                         total_questions, 
+                                                                        percentage, 
                                                                         package_id
                                                                     ) 
-                                                                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                                                                 """, (
                                             student_id,
                                             student_name,
                                             student_class,
                                             quiz_title,
-                                            final_score,
-                                            total_q,
+                                            correct_answers_count,  # score = düzgün cavab sayı
+                                            total_q,  # total_questions
+                                            percentage_score,  # percentage = faiz (%)
                                             selected_pkg_id
                                         ))
                                     conn.commit()
                                     st.balloons()
                                     st.success(
-                                        f"İmtahan başa çatdı! Nəticəniz: {final_score}% ({total_q} sualdan {score} düzgün)")
+                                        f"İmtahan başa çatdı! Nəticəniz: {percentage_score}% ({total_q} sualdan {correct_answers_count} düzgün)")
                                 except Exception as e:
                                     st.error(f"Nəticə yadda saxlanılarkən xəta: {e}")
                                 finally:
