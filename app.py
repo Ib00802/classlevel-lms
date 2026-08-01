@@ -718,13 +718,11 @@ else:
                             student_name = st.session_state.user['full_name']
                             student_class = st.session_state.user['class_level']
                             quiz_title = selected_pkg_title
-                            correct_answers_count = score  # Düzgün cavabların sayı
 
                             conn = get_db_connection()
                             if conn:
                                 try:
                                     with conn.cursor() as cur:
-                                        # Bazadakı BÜTÜN məcburi (NOT NULL) sütunları tam doldururuq
                                         cur.execute("""
                                                                     INSERT INTO quiz_results (
                                                                         student_id, 
@@ -733,10 +731,9 @@ else:
                                                                         quiz_title, 
                                                                         score, 
                                                                         total_questions, 
-                                                                        correct_answers, 
                                                                         package_id
                                                                     ) 
-                                                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                                                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                                                                 """, (
                                             student_id,
                                             student_name,
@@ -744,7 +741,6 @@ else:
                                             quiz_title,
                                             final_score,
                                             total_q,
-                                            correct_answers_count,
                                             selected_pkg_id
                                         ))
                                     conn.commit()
