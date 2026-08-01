@@ -1,7 +1,89 @@
 import hashlib
+import time
 import pandas as pd
 import psycopg2
 import streamlit as st
+
+
+# ==========================================
+# İMTAHAN NƏTİCƏSİ MODAL PƏNCƏRƏSİ
+# ==========================================
+@st.dialog("📊 İmtahan Nəticəsi və Ətraflı Analiz", width="large")
+def show_detailed_results_dialog(
+    score_percent,
+    total_q,
+    correct_cnt,
+    wrong_cnt,
+    blank_cnt,
+    time_spent_str,
+    user_answers,
+    questions,
+):
+    st.balloons()
+
+    # 1. Yuxarı Xülasə Paneli
+    st.markdown("### 📈 Ümumi Göstəricilər")
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Nəticə", f"{score_percent}%")
+    m2.metric("⏱️ Vaxt", time_spent_str)
+    m3.metric("✅ Düzgün", correct_cnt)
+    m4.metric("❌ Səhv", wrong_cnt)
+    m5.metric("⚪ Cavabsız", blank_cnt)
+
+    st.write("---")
+
+    # 2. Suallara filtrasiya olunmuş baxış
+    st.markdown("### 🔍 Suallara Baxış")
+    filter_option = st.radio(
+        "Göstəriləcək sualları seçin:",
+        [
+            "Hamısı",
+            "✅ Yalnız Düzgünlər",
+            "❌ Yalnız Səhvlər",
+            "⚪ Yalnız Cavablandırılmayanlar",
+        ],
+        horizontal=True,
+    )
+
+    st.write("---")
+
+    # 3. Sualların siyahılanması
+    for idx, q in enumerate(questions, 1):
+        q_id = q[0]
+        q_text = q[1]
+        opts = {"A": q[2], "B": q[3], "C": q[4], "D": q[5]}
+        correct_opt = q[6]
+
+        user_choice = user_answers.get(q_id, (None, None))[0]
+
+        if user_choice is None:
+            status = "blank"
+        elif user_choice == correct_opt:
+            status = "correct"
+        else:
+            status = "wrong"
+
+        if filter_option == "✅ Yalnız Düzgünlər" and status != "correct":
+            continue
+        if filter_option == "❌ Yalnız Səhvlər" and status != "wrong":
+            continue
+        if filter_option == "⚪ Yalnız Cavablandırılmayanlar" and status != "blank":
+            continue
+
+        if status == "correct":
+            st.success(
+                f"**Sual {idx}:** {q_text}  \n✅ **Sizin cavabınız:** {user_choice}) {opts.get(user_choice, '')} *(Doğru)*"
+            )
+        elif status == "wrong":
+            st.error(
+                f"**Sual {idx}:** {q_text}  \n❌ **Sizin cavabınız:** {user_choice}) {opts.get(user_choice, '')}  \n🎯 **Doğru cavab:** {correct_opt}) {opts.get(correct_opt, '')}"
+            )
+        else:
+            st.warning(
+                f"**Sual {idx}:** {q_text}  \n⚪ **Cavablandırılmayıb**  \n🎯 **Doğru cavab:** {correct_opt}) {opts.get(correct_opt, '')}"
+            )
+
+        st.caption("---")
 
 # Səhifə konfiqurasiyası
 st.set_page_config(page_title="ClassLevel LMS", page_icon="🎓", layout="wide")
@@ -693,6 +775,8 @@ else:
                 if not questions:
                     st.warning("Bu paketdə hələ heç bir sual yoxdur.")
                 else:
+                    if "start_time" not in st.session_state:
+                        st.session_state.start_time = time.time()
                     with st.form("take_quiz_form"):
                         user_answers = {}
                         for idx, q in enumerate(questions, 1):
@@ -705,53 +789,97 @@ else:
                             st.markdown("---")
                         submitted = st.form_submit_button("İmtahanı Tamamla və Nəticəni Gör")
                         if submitted:
-                            correct_answers_count = 0
+                            # 1. Vaxt fərqini hesablayırıq
+                            end_time = time.time()
+                            elapsed_seconds = int(
+                                end_time
+                                - st.session_state.get("start_time", end_time)
+                            )
+                            # Növbəti imtahan üçün taymeri sıfırlayırıq
+                            if "start_time" in st.session_state:
+                                del st.session_state["start_time"]
+
+                            minutes = elapsed_seconds // 60
+                            seconds = elapsed_seconds % 60
+                            time_spent_str = f"{minutes} dəq {seconds} san"
+
                             total_q = len(questions)
-                            for q_id, (ans, corr) in user_answers.items():
-                                if ans == corr:
-                                    correct_answers_count += 1
+                            correct_cnt = 0
+                            wrong_cnt = 0
+                            blank_cnt = 0
 
-                            # Faiz hesablannır
-                            percentage_score = round((correct_answers_count / total_q) * 100, 1) if total_q > 0 else 0
+                            # 2. Cavabların təhlili və sayılması
+                            for q in questions:
+                                q_id = q[0]
+                                correct_opt = q[6]
+                                user_choice = user_answers.get(
+                                    q_id, (None, None)
+                                )[0]
 
-                            # Daxil olan şagirdin və quizin məlumatları
-                            student_id = st.session_state.user['id']
-                            student_name = st.session_state.user['full_name']
-                            student_class = st.session_state.user['class_level']
+                                if user_choice is None:
+                                    blank_cnt += 1
+                                elif user_choice == correct_opt:
+                                    correct_cnt += 1
+                                else:
+                                    wrong_cnt += 1
+
+                            percentage_score = (
+                                round((correct_cnt / total_q) * 100, 1)
+                                if total_q > 0
+                                else 0
+                            )
+
+                            # 3. Məlumatların bazaya saxlanılması
+                            student_id = st.session_state.user["id"]
+                            student_name = st.session_state.user["full_name"]
+                            student_class = st.session_state.user["class_level"]
                             quiz_title = selected_pkg_title
 
                             conn = get_db_connection()
                             if conn:
                                 try:
                                     with conn.cursor() as cur:
-                                        # Bazanın tam gözlədiyi sütun adları:
-                                        cur.execute("""
-                                                                    INSERT INTO quiz_results (
-                                                                        student_id, 
-                                                                        student_name, 
-                                                                        class_level, 
-                                                                        quiz_title, 
-                                                                        score, 
-                                                                        total_questions, 
-                                                                        percentage, 
-                                                                        package_id
-                                                                    ) 
-                                                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                                                                """, (
-                                            student_id,
-                                            student_name,
-                                            student_class,
-                                            quiz_title,
-                                            correct_answers_count,  # score = düzgün cavab sayı
-                                            total_q,  # total_questions
-                                            percentage_score,  # percentage = faiz (%)
-                                            selected_pkg_id
-                                        ))
+                                        cur.execute(
+                                            """
+                                            INSERT INTO quiz_results (
+                                                student_id, 
+                                                student_name, 
+                                                class_level, 
+                                                quiz_title, 
+                                                score, 
+                                                total_questions, 
+                                                percentage, 
+                                                package_id
+                                            ) 
+                                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                        """,
+                                            (
+                                                student_id,
+                                                student_name,
+                                                student_class,
+                                                quiz_title,
+                                                correct_cnt,
+                                                total_q,
+                                                percentage_score,
+                                                selected_pkg_id,
+                                            ),
+                                        )
                                     conn.commit()
-                                    st.balloons()
-                                    st.success(
-                                        f"İmtahan başa çatdı! Nəticəniz: {percentage_score}% ({total_q} sualdan {correct_answers_count} düzgün)")
                                 except Exception as e:
-                                    st.error(f"Nəticə yadda saxlanılarkən xəta: {e}")
+                                    st.error(
+                                        f"Nəticə yadda saxlanılarkən xəta: {e}"
+                                    )
                                 finally:
                                     conn.close()
+
+                            # 4. Ətraflı analiz üçün modal pəncərəni açırıq
+                            show_detailed_results_dialog(
+                                percentage_score,
+                                total_q,
+                                correct_cnt,
+                                wrong_cnt,
+                                blank_cnt,
+                                time_spent_str,
+                                user_answers,
+                                questions,
+                            )
