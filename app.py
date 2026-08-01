@@ -7,7 +7,8 @@ import streamlit as st
 # DATABASE CONNECTION
 # ---------------------------------------------------------
 # Secrets-dən oxunur, yoxdursa birbaşa təyin edilən DB_URL-ə düşür
-DB_URL = st.secrets.get("DB_URL", "postgresql://postgres:password@localhost:5432/postgres")
+# .streamlit/secrets.toml faylından oxuyur, yoxdursa Supabase URL-ni istifadə edir:
+DB_URL = st.secrets.get("DB_URL", "postgresql://postgres:Muellim2026!@db.[PROJECT-REF].supabase.co:5432/postgres")
 
 
 def get_db_connection():
