@@ -648,114 +648,81 @@ else:
                 finally:
                     conn.close()
 
+        # -----------------------------------------------------
+        # 3. STUDENT QUIZZES
+        # -----------------------------------------------------
+
         elif s_menu == "📝 Quizlər və İmtahanlar":
-            st.header("📝 Quizlər və İmtahanlar")
+            st.header("📝 İmtahanlar və Testlər")
 
             conn = get_db_connection()
-            packages = []
+            pkg_list = []
             if conn:
                 try:
                     with conn.cursor() as cur:
-                        cur.execute(
-                            """
-                            SELECT id, title, difficulty_level, time_limit 
-                            FROM quiz_packages 
-                            WHERE class_level = %s 
-                            ORDER BY id DESC
-                        """,
-                            (student_class,),
-                        )
-                        packages = cur.fetchall()
+                        cur.execute("SELECT id, title, difficulty_level, time_limit FROM quiz_packages WHERE class_level = %s ORDER BY id DESC",
+                                    (st.session_state.user['class_level'],))
+
+                        pkg_list = cur.fetchall()
                 except Exception as e:
-                    st.error(f"Quizlər yüklənərkən xəta: {e}")
+                    st.error(f"Xəta: {e}")
                 finally:
                     conn.close()
-
-            if not packages:
-                st.info(
-                    f"{student_class}-cı sinif üçün aktiv quiz paketi tapılmadı."
-                )
+            if not pkg_list:
+                st.info(f"Hal-hazırda {st.session_state.user['class_level']}-ci sinif üçün aktiv quiz paketi yoxdur.")
             else:
-                pkg_options = {
-                    f"{pkg[1]} ({pkg[2]} - {pkg[3]} dəqiqə)": pkg[0]
-                    for pkg in packages
-                }
-                selected_pkg_title = st.selectbox(
-                    "İşləmək istədiyiniz quizi seçin:", list(pkg_options.keys())
-                )
+                pkg_options = {f"{p[1]} ({p[2]} - {p[3]} dəq)": p[0] for p in pkg_list}
+                selected_pkg_title = st.selectbox("İmtahan paketini seçin:", list(pkg_options.keys()))
                 selected_pkg_id = pkg_options[selected_pkg_title]
-
+                # Sualları çəkirik
                 conn = get_db_connection()
                 questions = []
                 if conn:
                     try:
                         with conn.cursor() as cur:
-                            cur.execute(
-                                """
+                            cur.execute("""
                                 SELECT id, question_text, option_a, option_b, option_c, option_d, correct_option 
                                 FROM quizzes 
-                                WHERE quiz_package_id = %s 
-                                ORDER BY id ASC
-                            """,
-                                (selected_pkg_id,),
-                            )
+                                WHERE quiz_package_id = %s
+                            """, (selected_pkg_id,))
                             questions = cur.fetchall()
                     except Exception as e:
                         st.error(f"Suallar yüklənərkən xəta: {e}")
                     finally:
                         conn.close()
-
                 if not questions:
-                    st.warning("Bu paketdə hələ ki sual mövcud deyil.")
+                    st.warning("Bu paketdə hələ heç bir sual yoxdur.")
                 else:
-                    with st.form(f"quiz_form_{selected_pkg_id}"):
+                    with st.form("take_quiz_form"):
                         user_answers = {}
-                        st.markdown(f"### 📋 {selected_pkg_title}")
-
                         for idx, q in enumerate(questions, 1):
-                            q_id, q_text, opt_a, opt_b, opt_c, opt_d, corr = q
-                            st.write(f"**Sual {idx}. {q_text}**")
-
-                            options = {
-                                f"A) {opt_a}": "A",
-                                f"B) {opt_b}": "B",
-                                f"C) {opt_c}": "C",
-                                f"D) {opt_d}": "D",
-                            }
-
-                            choice = st.radio(
-                                f"Cavab ({idx}):",
-                                list(options.keys()),
-                                key=f"q_key_{q_id}",
-                                label_visibility="collapsed",
-                            )
-                            user_answers[q_id] = (options[choice], corr)
-                            st.write("---")
-
-                        submitted = st.form_submit_button(
-                            "İmtahanı Tamamla və Nəticəni Gör"
-                        )
+                            st.markdown(f"**Sual {idx}. {q[1]}**")
+                            opts = [f"A) {q[2]}", f"B) {q[3]}", f"C) {q[4]}", f"D) {q[5]}"]
+                            ans = st.radio(f"Cavabınız ({idx}):", opts, index=None, key=f"q_{q[0]}")
+                            if ans:
+                                selected_letter = ans[0]  # "A", "B", "C", "D"
+                                user_answers[q[0]] = (selected_letter, q[6])
+                            st.markdown("---")
+                        submitted = st.form_submit_button("İmtahanı Tamamla və Nəticəni Gör")
                         if submitted:
                             score = 0
                             total_q = len(questions)
                             for q_id, (ans, corr) in user_answers.items():
                                 if ans == corr:
                                     score += 1
-
-                            final_score = round((score / total_q) * 100, 1)
-
-                            # Daxil olmuş şagirdin adını götürürük
-                            student_name = st.session_state.user.get("full_name", "")
-
+                            final_score = round((score / total_q) * 100, 1) if total_q > 0 else 0
+                            # Daxil olan şagirdin məlumatları
+                            student_id = st.session_state.user['id']
+                            student_name = st.session_state.user['full_name']
+                            student_class = st.session_state.user['class_level']
                             conn = get_db_connection()
                             if conn:
                                 try:
                                     with conn.cursor() as cur:
-                                        # student_name dəyəri artıq INSERT sorğusuna əlavə edildi!
                                         cur.execute("""
-                                            INSERT INTO quiz_results (student_id, student_name, package_id, score) 
-                                            VALUES (%s, %s, %s, %s)
-                                        """, (student_id, student_name, selected_pkg_id, final_score))
+                                            INSERT INTO quiz_results (student_id, student_name, package_id, score, class_level) 
+                                            VALUES (%s, %s, %s, %s, %s)
+                                        """, (student_id, student_name, selected_pkg_id, final_score, student_class))
                                     conn.commit()
                                     st.balloons()
                                     st.success(
