@@ -717,20 +717,36 @@ else:
                             student_id = st.session_state.user['id']
                             student_name = st.session_state.user['full_name']
                             student_class = st.session_state.user['class_level']
-
-                            # Seçilən quizin tam adını əldə edirik
                             quiz_title = selected_pkg_title
+                            correct_answers_count = score  # Düzgün cavabların sayı
 
                             conn = get_db_connection()
                             if conn:
                                 try:
                                     with conn.cursor() as cur:
+                                        # Bazadakı BÜTÜN məcburi (NOT NULL) sütunları tam doldururuq
                                         cur.execute("""
-                                                                    INSERT INTO quiz_results (student_id, student_name, class_level, package_id, quiz_title, score) 
-                                                                    VALUES (%s, %s, %s, %s, %s, %s)
+                                                                    INSERT INTO quiz_results (
+                                                                        student_id, 
+                                                                        student_name, 
+                                                                        class_level, 
+                                                                        quiz_title, 
+                                                                        score, 
+                                                                        total_questions, 
+                                                                        correct_answers, 
+                                                                        package_id
+                                                                    ) 
+                                                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                                                                 """, (
-                                        student_id, student_name, student_class, selected_pkg_id, quiz_title,
-                                        final_score))
+                                            student_id,
+                                            student_name,
+                                            student_class,
+                                            quiz_title,
+                                            final_score,
+                                            total_q,
+                                            correct_answers_count,
+                                            selected_pkg_id
+                                        ))
                                     conn.commit()
                                     st.balloons()
                                     st.success(
