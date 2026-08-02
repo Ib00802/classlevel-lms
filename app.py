@@ -18,8 +18,63 @@ def show_detailed_results_dialog(
     time_spent_str,
     user_answers,
     questions,
-):
-    st.balloons()
+): pass
+
+# ==========================================
+# QUİZ LİMİTİNİ YOXLAYAN FUNKSİYA (3 GÜN)
+# ==========================================
+def check_quiz_lock_status(student_id, package_id):
+    conn = get_db_connection()
+    is_locked = False
+    time_left_str = ""
+    if conn:
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT created_at FROM quiz_results WHERE student_id = %s AND package_id = %s",
+                    (student_id, package_id),
+                )
+                result = cur.fetchone()
+                if result:
+                    last_attempt = result[0]
+                    cur.execute("SELECT NOW()")
+                    now = cur.fetchone()[0]
+
+                    time_diff = now - last_attempt
+                    total_seconds_passed = time_diff.total_seconds()
+                    three_days_in_seconds = 3 * 24 * 3600
+
+                    if total_seconds_passed < three_days_in_seconds:
+                        is_locked = True
+                        rem_sec = three_days_in_seconds - total_seconds_passed
+                        hours = int(rem_sec // 3600)
+                        minutes = int((rem_sec % 3600) // 60)
+                        if hours >= 24:
+                            time_left_str = f"{hours // 24} gün {hours % 24} saat {minutes} dəq"
+                        else:
+                            time_left_str = f"{hours} saat {minutes} dəq"
+        finally:
+            conn.close()
+    return is_locked, time_left_str
+
+    # Nəticəyə uyğun Emosiya və Animasiya
+    if score_percent >= 90:
+        st.balloons()  # Yalnız 90-100% üçün konfeti/şar animasiyası
+        st.success(
+            f"🏆 **MÜKƏMMƏL! Siz Çempionsunuz!**  \nNəticəniz: **{score_percent}%**"
+        )
+    elif score_percent >= 70:
+        st.success(
+            f"🥳 **Əla Nəticə! Çox yaxşı iş çıxardınız!**  \nNəticəniz: **{score_percent}%**"
+        )
+    elif score_percent >= 50:
+        st.info(
+            f"😐 **Orta Nəticə.** Bir az da təkrar etsəniz daha yaxşı olar!  \nNəticəniz: **{score_percent}%**"
+        )
+    else:
+        st.error(
+            f"💔 **Məyus Olmayın!** Mövzunu yaxşıca öyrənib yenidən cəhd edin.  \nNəticəniz: **{score_percent}%**"
+        )
 
     # 1. Yuxarı Xülasə Paneli
     st.markdown("### 📈 Ümumi Göstəricilər")
@@ -607,9 +662,11 @@ else:
     # ŞAGİRD PANELİ
     # --------------------------------------
     elif st.session_state.user["role"] == "student":
+        # 1. Dəyişənləri təyin edirik (Xətaların qarşısını almaq üçün)
         student_class = st.session_state.user.get("class_level", 9)
         student_id = st.session_state.user["id"]
 
+        # 2. Sol menyu (Sidebar)
         st.sidebar.markdown(f"### 🎓 {st.session_state.user['full_name']}")
         st.sidebar.info(f"📌 {student_class}-cı Sinif Şagirdi")
 
@@ -622,51 +679,55 @@ else:
             ],
             label_visibility="collapsed",
         )
-
         st.sidebar.write("---")
         if st.sidebar.button("🚪 Çıxış Et", use_container_width=True):
             st.session_state.user = None
             st.rerun()
 
+        # 3. Əsas Səhifə və Şəxsi Nəticələr (Konfidential)
         if s_menu == "🏠 Əsas Səhifə / Score Board":
             st.header("🏠 Xoş Gəldiniz!")
             st.write(f"Salam, **{st.session_state.user['full_name']}**!")
 
             st.write("---")
-            st.subheader("🏆 Liderlər Lövhəsi (Score Board)")
+            st.subheader("📊 Mənim Son İmtahan Nəticələrim")
+
             conn = get_db_connection()
             if conn:
                 try:
                     with conn.cursor() as cur:
-                        cur.execute("""
-                            SELECT u.full_name, u.class_level, COALESCE(SUM(r.score), 0) as total_score, COUNT(r.id) as total_quizzes
-                            FROM users u
-                            LEFT JOIN quiz_results r ON u.id = r.student_id
-                            WHERE u.role = 'student'
-                            GROUP BY u.id, u.full_name, u.class_level
-                            ORDER BY total_score DESC, total_quizzes DESC
-                        """)
-                        scores = cur.fetchall()
+                        # Sadəcə daxil olan şagirdin nəticələrini çəkirik
+                        cur.execute(
+                            """
+                            SELECT quiz_title, score, total_questions, percentage, created_at 
+                            FROM quiz_results 
+                            WHERE student_id = %s 
+                            ORDER BY created_at DESC
+                        """,
+                            (student_id,),
+                        )
 
-                    if scores:
-                        df_scores = pd.DataFrame(
-                            scores,
+                        user_results = cur.fetchall()
+
+                    if user_results:
+                        df = pd.DataFrame(
+                            user_results,
                             columns=[
-                                "Şagird",
-                                "Sinif",
-                                "Ümumi Bal",
-                                "İşlənmiş Quiz Sayı",
+                                "Quiz Adı",
+                                "Düzgün Sayı",
+                                "Ümumi Sual",
+                                "Nəticə (%)",
+                                "Tarix",
                             ],
                         )
-                        st.dataframe(
-                            df_scores,
-                            use_container_width=True,
-                            hide_index=True,
+                        df["Tarix"] = pd.to_datetime(df["Tarix"]).dt.strftime(
+                            "%Y-%m-%d %H:%M"
                         )
+                        st.dataframe(df, use_container_width=True, hide_index=True)
                     else:
-                        st.info("Hələ ki heç bir nəticə qeydə alınmayıb.")
+                        st.info("Hələ ki heç bir imtahan nəticəniz yoxdur.")
                 except Exception as e:
-                    st.info("Liderlər lövhəsi yenilənir.")
+                    st.error(f"Nəticələr yüklənərkən xəta: {e}")
                 finally:
                     conn.close()
 
@@ -733,29 +794,49 @@ else:
         # -----------------------------------------------------
         # 3. STUDENT QUIZZES
         # -----------------------------------------------------
-
         elif s_menu == "📝 Quizlər və İmtahanlar":
-            st.header("📝 İmtahanlar və Testlər")
+         st.header("📝 İmtahanlar və Testlər")
 
-            conn = get_db_connection()
-            pkg_list = []
-            if conn:
-                try:
-                    with conn.cursor() as cur:
-                        cur.execute("SELECT id, title, difficulty_level, time_limit FROM quiz_packages WHERE class_level = %s ORDER BY id DESC",
-                                    (st.session_state.user['class_level'],))
+        student_id = st.session_state.user["id"]
+        student_class = st.session_state.user.get("class_level", 9)
 
-                        pkg_list = cur.fetchall()
-                except Exception as e:
-                    st.error(f"Xəta: {e}")
-                finally:
-                    conn.close()
-            if not pkg_list:
-                st.info(f"Hal-hazırda {st.session_state.user['class_level']}-ci sinif üçün aktiv quiz paketi yoxdur.")
+        conn = get_db_connection()
+        pkg_list = []
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id, title, difficulty_level, time_limit FROM quiz_packages WHERE class_level = %s ORDER BY id DESC",
+                        (student_class,),
+                    )
+                    pkg_list = cur.fetchall()
+            except Exception as e:
+                st.error(f"Xəta: {e}")
+            finally:
+                conn.close()
+
+        if not pkg_list:
+            st.info(f"Hal-hazırda {student_class}-ci sinif üçün aktiv quiz paketi yoxdur.")
+        else:
+            pkg_options = {f"{p[1]} ({p[2]} - {p[3]} dəq)": p[0] for p in pkg_list}
+            selected_pkg_title = st.selectbox(
+                "İmtahan paketini seçin:", list(pkg_options.keys())
+            )
+            selected_pkg_id = pkg_options[selected_pkg_title]
+
+            # ⏳ 3 GÜNLÜK VAXT MƏHDUDİYYƏTİ YOXLAMASI
+            is_locked, time_left = check_quiz_lock_status(student_id, selected_pkg_id)
+
+            if is_locked:
+                st.warning(
+                    f"⏳ Bu imtahanı yaxınlarda tamamlamısınız. 3 günlük limit qaydasına əsasən təkrar cəhd üçün **{time_left}** gözləməlisiniz."
+                )
+                st.info(
+                    "💡 İmtahan nəticələrinizə və səhvlərinizə 'Əsas Səhifə' bölməsindən baxa bilərsiniz."
+                )
             else:
-                pkg_options = {f"{p[1]} ({p[2]} - {p[3]} dəq)": p[0] for p in pkg_list}
-                selected_pkg_title = st.selectbox("İmtahan paketini seçin:", list(pkg_options.keys()))
-                selected_pkg_id = pkg_options[selected_pkg_title]
+                # Kilitli deyilsə buradan aşağı sizin mövcud sualları çəkmə kodunuz davam edir...
+
                 # Sualları çəkirik
                 conn = get_db_connection()
                 questions = []
@@ -795,7 +876,7 @@ else:
                                 end_time
                                 - st.session_state.get("start_time", end_time)
                             )
-                            # Növbəti imtahan üçün taymeri sıfırlayırıq
+
                             if "start_time" in st.session_state:
                                 del st.session_state["start_time"]
 
@@ -823,22 +904,34 @@ else:
                                 else:
                                     wrong_cnt += 1
 
+                            # Faiz hesablannır (Xəta olmaması üçün minimum 0.0 zəmanəti)
                             percentage_score = (
                                 round((correct_cnt / total_q) * 100, 1)
                                 if total_q > 0
-                                else 0
+                                else 0.0
                             )
 
-                            # 3. Məlumatların bazaya saxlanılması
+                            # 3. Məlumatların toplanması
                             student_id = st.session_state.user["id"]
                             student_name = st.session_state.user["full_name"]
                             student_class = st.session_state.user["class_level"]
                             quiz_title = selected_pkg_title
 
+                            # 4. Bazaya Saxlanma Hissəsi (Xətasız və Tək Nəticə Standartı)
                             conn = get_db_connection()
                             if conn:
                                 try:
                                     with conn.cursor() as cur:
+                                        # A) Əgər şagird bu quizi əvvəl işləyibsə, köhnə nəticəsini silirik (Dublikat olmaması üçün)
+                                        cur.execute(
+                                            """
+                                            DELETE FROM quiz_results 
+                                            WHERE student_id = %s AND package_id = %s
+                                        """,
+                                            (student_id, selected_pkg_id),
+                                        )
+
+                                        # B) Ən sonuncu nəticəni tam sütun strukturu ilə əlavə edirik
                                         cur.execute(
                                             """
                                             INSERT INTO quiz_results (
@@ -849,19 +942,20 @@ else:
                                                 score, 
                                                 total_questions, 
                                                 percentage, 
-                                                package_id
+                                                package_id,
+                                                created_at
                                             ) 
-                                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
                                         """,
                                             (
                                                 student_id,
                                                 student_name,
                                                 student_class,
                                                 quiz_title,
-                                                correct_cnt,
-                                                total_q,
-                                                percentage_score,
-                                                selected_pkg_id,
+                                                correct_cnt,  # score (düzgün cavab sayı)
+                                                total_q,  # total_questions (ümumi sual)
+                                                percentage_score,  # percentage (faiz göstəricisi)
+                                                selected_pkg_id,  # package_id
                                             ),
                                         )
                                     conn.commit()
@@ -872,7 +966,8 @@ else:
                                 finally:
                                     conn.close()
 
-                            # 4. Ətraflı analiz üçün modal pəncərəni açırıq
+
+                            # 5. Ətraflı analiz üçün modal pəncərəni açırıq
                             show_detailed_results_dialog(
                                 percentage_score,
                                 total_q,
