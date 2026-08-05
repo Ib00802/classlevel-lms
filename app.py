@@ -833,7 +833,7 @@ else:
                         )
                         pkg_list = cur.fetchall()
                 except Exception as e:
-                    st.error(f"Xəta: {e}")
+                    st.error(f"Paketlər yüklənərkən xəta: {e}")
                 finally:
                     conn.close()
 
@@ -842,48 +842,119 @@ else:
                     f"Hal-hazırda {student_class}-ci sinif üçün aktiv quiz paketi yoxdur."
                 )
             else:
+                # 1. Şagirdin sinfinə uyğun paket seçimi
                 pkg_options = {
                     f"{p[1]} ({p[2]} - {p[3]} dəq)": p[0] for p in pkg_list
                 }
-
-                # 1. Selectbox məhz burada (şagird menyusunun daxilində) olmalıdır
                 selected_pkg_title = st.selectbox(
                     "İmtahan paketini seçin:", list(pkg_options.keys())
                 )
                 selected_pkg_id = pkg_options[selected_pkg_title]
 
-                # 2. Limit yoxlaması da məhz bu selectbox-dan sonra işləməlidir
+                # 2. 3 günlük limitin yoxlanılması
                 is_locked, time_left = check_quiz_lock_status(
                     student_id, selected_pkg_id
                 )
 
                 if is_locked:
+                    # 🔒 İmtahan kilitli olduqda YALNIZ xəbərdarlıq görünür (Suallar kəsilir)
                     st.warning(
                         f"⏳ Bu imtahanı yaxınlarda tamamlamısınız. 3 günlük limit qaydasına əsasən təkrar cəhd üçün **{time_left}** gözləməlisiniz."
                     )
                     st.info(
-                        "💡 İmtahan nəticələrinizə və səhvlərinizə 'Əsas Səhifə' bölməsindən baxa bilərsiniz."
+                        "💡 İmtahan nəticələrinizə və səhvlərinizə 'Əsas Səhifə / Score Board' bölməsindən baxa bilərsiniz."
                     )
                 else:
-                    st.success("İmtahana başlaya bilərsiniz!")
-                    # Sualları göstərən kodlarınız...
+                    # 🔓 İmtahan açıq olduqda suallar və imtahan formu yüklənir
+                    conn = get_db_connection()
+                    questions = []
+                    if conn:
+                        try:
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    "SELECT id, question_text, option_a, option_b, option_c, option_d, correct_option "
+                                    "FROM quiz_questions WHERE package_id = %s ORDER BY id ASC",
+                                    (selected_pkg_id,),
+                                )
+                                questions = cur.fetchall()
+                        except Exception as e:
+                            st.error(f"Suallar yüklənərkən xəta: {e}")
+                        finally:
+                            conn.close()
 
-                # Sualları çəkirik
-                conn = get_db_connection()
-                questions = []
-                if conn:
-                    try:
-                        with conn.cursor() as cur:
-                            cur.execute("""
-                                SELECT id, question_text, option_a, option_b, option_c, option_d, correct_option 
-                                FROM quizzes 
-                                WHERE quiz_package_id = %s
-                            """, (selected_pkg_id,))
-                            questions = cur.fetchall()
-                    except Exception as e:
-                        st.error(f"Suallar yüklənərkən xəta: {e}")
-                    finally:
-                        conn.close()
+                    if not questions:
+                        st.warning("Bu paketdə hələ ki heç bir sual yaradılmayıb.")
+                    else:
+                        st.write("---")
+                        with st.form(f"quiz_form_{selected_pkg_id}"):
+                            user_answers = {}
+
+                            for idx, q in enumerate(questions, 1):
+                                q_id, q_text, opt_a, opt_b, opt_c, opt_d, _ = q
+                                st.markdown(f"**Sual {idx}.** {q_text}")
+
+                                options = {
+                                    f"A) {opt_a}": "A",
+                                    f"B) {opt_b}": "B",
+                                    f"C) {opt_c}": "C",
+                                    f"D) {opt_d}": "D",
+                                }
+
+                                selected_option = st.radio(
+                                    f"Cavabınız ({idx}):",
+                                    list(options.keys()),
+                                    key=f"q_{q_id}",
+                                )
+                                user_answers[q_id] = options[selected_option]
+                                st.write("---")
+
+                            submit_quiz = st.form_submit_button(
+                                "İmtahanı Bitir və Təqdim Et"
+                            )
+
+                            if submit_quiz:
+                                correct_cnt = 0
+                                total_q = len(questions)
+
+                                for q in questions:
+                                    q_id, _, _, _, _, _, correct_opt = q
+                                    if user_answers.get(q_id) == correct_opt:
+                                        correct_cnt += 1
+
+                                score_percent = round(
+                                    (correct_cnt / total_q) * 100, 2
+                                )
+
+                                # Nəticəni bazaya yazırıq
+                                conn = get_db_connection()
+                                if conn:
+                                    try:
+                                        with conn.cursor() as cur:
+                                            cur.execute(
+                                                """
+                                                INSERT INTO quiz_results (student_id, package_id, quiz_title, score, total_questions, percentage, created_at)
+                                                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                                                """,
+                                                (
+                                                    student_id,
+                                                    selected_pkg_id,
+                                                    selected_pkg_title.split("(")[
+                                                        0
+                                                    ].strip(),
+                                                    correct_cnt,
+                                                    total_q,
+                                                    score_percent,
+                                                ),
+                                            )
+                                            conn.commit()
+                                        st.success(
+                                            f"İmtahan tamamlandı! Nəticəniz: {correct_cnt}/{total_q} ({score_percent}%)"
+                                        )
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Nəticə saxlanılarkən xəta: {e}")
+                                    finally:
+                                        conn.close()
                 if not questions:
                     st.warning("Bu paketdə hələ heç bir sual yoxdur.")
                 else:
