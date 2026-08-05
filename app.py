@@ -850,13 +850,13 @@ else:
                 )
                 selected_pkg_id = pkg_options[selected_pkg_title]
 
-                # ⏳ Limit yoxlaması
+                # ⏳ LIMIT YOXLAMASI
                 is_locked, time_left = check_quiz_lock_status(
                     student_id, selected_pkg_id
                 )
 
                 if is_locked:
-                    # 🔒 İmtahan kilitli olduqda YALNIZ bu mesajlar çıxır və kod burada dayanır
+                    # 🔒 İmtahan kilitlidirsə YALNIZ xəbərdarlıqlar çıxır, aşağıdakı kodlar İCRA OLUNMUR
                     st.warning(
                         f"⏳ Bu imtahanı yaxınlarda tamamlamısınız. 3 günlük limit qaydasına əsasən təkrar cəhd üçün **{time_left}** gözləməlisiniz."
                     )
@@ -865,7 +865,7 @@ else:
                     )
 
                 else:
-                    # 🔓 İmtahan açıq olduqda suallar MƏHZ BU ELSE İÇİNDƏ çəkilir və yoxlanır
+                    # 🔓 İmtahan açıq olduqda suallar çəkilir və sizin Taymer + Analiz kodunuz işləyir
                     conn = get_db_connection()
                     questions = []
                     if conn:
@@ -882,200 +882,142 @@ else:
                         finally:
                             conn.close()
 
+                    # SİZİN SEVDİYİNİZ VƏ İSTƏDİYİNİZ BÜTÜN FUNKSİONAL KOD BURADA:
                     if not questions:
-                        st.warning("Bu paketdə hələ ki heç bir sual yaradılmayıb.")
+                        st.warning("Bu paketdə hələ ki heç bir sual yoxdur.")
                     else:
-                        st.write("---")
-                        with st.form(f"quiz_form_{selected_pkg_id}"):
+                        if "start_time" not in st.session_state:
+                            st.session_state.start_time = time.time()
+
+                        with st.form("take_quiz_form"):
                             user_answers = {}
-
                             for idx, q in enumerate(questions, 1):
-                                q_id, q_text, opt_a, opt_b, opt_c, opt_d, _ = q
-                                st.markdown(f"**Sual {idx}.** {q_text}")
-
-                                options = {
-                                    f"A) {opt_a}": "A",
-                                    f"B) {opt_b}": "B",
-                                    f"C) {opt_c}": "C",
-                                    f"D) {opt_d}": "D",
-                                }
-
-                                selected_option = st.radio(
+                                st.markdown(f"**Sual {idx}. {q[1]}**")
+                                opts = [
+                                    f"A) {q[2]}",
+                                    f"B) {q[3]}",
+                                    f"C) {q[4]}",
+                                    f"D) {q[5]}",
+                                ]
+                                ans = st.radio(
                                     f"Cavabınız ({idx}):",
-                                    list(options.keys()),
-                                    key=f"q_{q_id}",
+                                    opts,
+                                    index=None,
+                                    key=f"q_{q[0]}",
                                 )
-                                user_answers[q_id] = options[selected_option]
-                                st.write("---")
+                                if ans:
+                                    selected_letter = ans[0]  # "A", "B", "C", "D"
+                                    user_answers[q[0]] = (selected_letter, q[6])
+                                st.markdown("---")
 
-                            submit_quiz = st.form_submit_button(
-                                "İmtahanı Bitir və Təqdim Et"
+                            submitted = st.form_submit_button(
+                                "İmtahanı Tamamla və Nəticəni Gör"
                             )
 
-                            if submit_quiz:
-                                correct_cnt = 0
-                                total_q = len(questions)
-
-                                for q in questions:
-                                    q_id, _, _, _, _, _, correct_opt = q
-                                    if user_answers.get(q_id) == correct_opt:
-                                        correct_cnt += 1
-
-                                score_percent = round(
-                                    (correct_cnt / total_q) * 100, 2
+                            if submitted:
+                                # 1. Vaxt fərqini hesablayırıq
+                                end_time = time.time()
+                                elapsed_seconds = int(
+                                    end_time
+                                    - st.session_state.get("start_time", end_time)
                                 )
 
+                                if "start_time" in st.session_state:
+                                    del st.session_state["start_time"]
+
+                                minutes = elapsed_seconds // 60
+                                seconds = elapsed_seconds % 60
+                                time_spent_str = f"{minutes} dəq {seconds} san"
+
+                                total_q = len(questions)
+                                correct_cnt = 0
+                                wrong_cnt = 0
+                                blank_cnt = 0
+
+                                # 2. Cavabların təhlili və sayılması
+                                for q in questions:
+                                    q_id = q[0]
+                                    correct_opt = q[6]
+                                    user_choice = user_answers.get(
+                                        q_id, (None, None)
+                                    )[0]
+
+                                    if user_choice is None:
+                                        blank_cnt += 1
+                                    elif user_choice == correct_opt:
+                                        correct_cnt += 1
+                                    else:
+                                        wrong_cnt += 1
+
+                                percentage_score = (
+                                    round((correct_cnt / total_q) * 100, 1)
+                                    if total_q > 0
+                                    else 0.0
+                                )
+
+                                # 3. Məlumatların toplanması
+                                student_id = st.session_state.user["id"]
+                                student_name = st.session_state.user["full_name"]
+                                student_class = st.session_state.user["class_level"]
+                                quiz_title = selected_pkg_title
+
+                                # 4. Bazaya Saxlanma Hissəsi
                                 conn = get_db_connection()
                                 if conn:
                                     try:
                                         with conn.cursor() as cur:
+                                            # A) Köhnə nəticəni silirik
                                             cur.execute(
                                                 """
-                                                INSERT INTO quiz_results (student_id, package_id, quiz_title, score, total_questions, percentage, created_at)
-                                                VALUES (%s, %s, %s, %s, %s, %s, NOW())
-                                                """,
+                                                DELETE FROM quiz_results 
+                                                WHERE student_id = %s AND package_id = %s
+                                            """,
+                                                (student_id, selected_pkg_id),
+                                            )
+
+                                            # B) Yeni nəticəni yazırıq
+                                            cur.execute(
+                                                """
+                                                INSERT INTO quiz_results (
+                                                    student_id, 
+                                                    student_name, 
+                                                    class_level, 
+                                                    quiz_title, 
+                                                    score, 
+                                                    total_questions, 
+                                                    percentage, 
+                                                    package_id,
+                                                    created_at
+                                                ) 
+                                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                                            """,
                                                 (
                                                     student_id,
-                                                    selected_pkg_id,
-                                                    selected_pkg_title.split("(")[
-                                                        0
-                                                    ].strip(),
+                                                    student_name,
+                                                    student_class,
+                                                    quiz_title,
                                                     correct_cnt,
                                                     total_q,
-                                                    score_percent,
+                                                    percentage_score,
+                                                    selected_pkg_id,
                                                 ),
                                             )
-                                            conn.commit()
-                                        st.success(
-                                            f"İmtahan tamamlandı! Nəticəniz: {correct_cnt}/{total_q} ({score_percent}%)"
-                                        )
-                                        st.rerun()
+                                        conn.commit()
                                     except Exception as e:
-                                        st.error(f"Nəticə saxlanılarkən xəta: {e}")
+                                        st.error(
+                                            f"Nəticə yadda saxlanılarkən xəta: {e}"
+                                        )
                                     finally:
                                         conn.close()
-                if not questions:
-                    st.warning("Bu paketdə hələ heç bir sual yoxdur.")
-                else:
-                    if "start_time" not in st.session_state:
-                        st.session_state.start_time = time.time()
-                    with st.form("take_quiz_form"):
-                        user_answers = {}
-                        for idx, q in enumerate(questions, 1):
-                            st.markdown(f"**Sual {idx}. {q[1]}**")
-                            opts = [f"A) {q[2]}", f"B) {q[3]}", f"C) {q[4]}", f"D) {q[5]}"]
-                            ans = st.radio(f"Cavabınız ({idx}):", opts, index=None, key=f"q_{q[0]}")
-                            if ans:
-                                selected_letter = ans[0]  # "A", "B", "C", "D"
-                                user_answers[q[0]] = (selected_letter, q[6])
-                            st.markdown("---")
-                        submitted = st.form_submit_button("İmtahanı Tamamla və Nəticəni Gör")
-                        if submitted:
-                            # 1. Vaxt fərqini hesablayırıq
-                            end_time = time.time()
-                            elapsed_seconds = int(
-                                end_time
-                                - st.session_state.get("start_time", end_time)
-                            )
 
-                            if "start_time" in st.session_state:
-                                del st.session_state["start_time"]
-
-                            minutes = elapsed_seconds // 60
-                            seconds = elapsed_seconds % 60
-                            time_spent_str = f"{minutes} dəq {seconds} san"
-
-                            total_q = len(questions)
-                            correct_cnt = 0
-                            wrong_cnt = 0
-                            blank_cnt = 0
-
-                            # 2. Cavabların təhlili və sayılması
-                            for q in questions:
-                                q_id = q[0]
-                                correct_opt = q[6]
-                                user_choice = user_answers.get(
-                                    q_id, (None, None)
-                                )[0]
-
-                                if user_choice is None:
-                                    blank_cnt += 1
-                                elif user_choice == correct_opt:
-                                    correct_cnt += 1
-                                else:
-                                    wrong_cnt += 1
-
-                            # Faiz hesablannır (Xəta olmaması üçün minimum 0.0 zəmanəti)
-                            percentage_score = (
-                                round((correct_cnt / total_q) * 100, 1)
-                                if total_q > 0
-                                else 0.0
-                            )
-
-                            # 3. Məlumatların toplanması
-                            student_id = st.session_state.user["id"]
-                            student_name = st.session_state.user["full_name"]
-                            student_class = st.session_state.user["class_level"]
-                            quiz_title = selected_pkg_title
-
-                            # 4. Bazaya Saxlanma Hissəsi (Xətasız və Tək Nəticə Standartı)
-                            conn = get_db_connection()
-                            if conn:
-                                try:
-                                    with conn.cursor() as cur:
-                                        # A) Əgər şagird bu quizi əvvəl işləyibsə, köhnə nəticəsini silirik (Dublikat olmaması üçün)
-                                        cur.execute(
-                                            """
-                                            DELETE FROM quiz_results 
-                                            WHERE student_id = %s AND package_id = %s
-                                        """,
-                                            (student_id, selected_pkg_id),
-                                        )
-
-                                        # B) Ən sonuncu nəticəni tam sütun strukturu ilə əlavə edirik
-                                        cur.execute(
-                                            """
-                                            INSERT INTO quiz_results (
-                                                student_id, 
-                                                student_name, 
-                                                class_level, 
-                                                quiz_title, 
-                                                score, 
-                                                total_questions, 
-                                                percentage, 
-                                                package_id,
-                                                created_at
-                                            ) 
-                                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
-                                        """,
-                                            (
-                                                student_id,
-                                                student_name,
-                                                student_class,
-                                                quiz_title,
-                                                correct_cnt,  # score (düzgün cavab sayı)
-                                                total_q,  # total_questions (ümumi sual)
-                                                percentage_score,  # percentage (faiz göstəricisi)
-                                                selected_pkg_id,  # package_id
-                                            ),
-                                        )
-                                    conn.commit()
-                                except Exception as e:
-                                    st.error(
-                                        f"Nəticə yadda saxlanılarkən xəta: {e}"
-                                    )
-                                finally:
-                                    conn.close()
-
-
-                            # 5. Ətraflı analiz üçün modal pəncərəni açırıq
-                            show_detailed_results_dialog(
-                                percentage_score,
-                                total_q,
-                                correct_cnt,
-                                wrong_cnt,
-                                blank_cnt,
-                                time_spent_str,
-                                user_answers,
-                                questions,
-                            )
+                                # 5. Ətraflı analiz üçün modal pəncərəni açırıq
+                                show_detailed_results_dialog(
+                                    percentage_score,
+                                    total_q,
+                                    correct_cnt,
+                                    wrong_cnt,
+                                    blank_cnt,
+                                    time_spent_str,
+                                    user_answers,
+                                    questions,
+                                )
