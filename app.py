@@ -873,7 +873,7 @@ else:
                             with conn.cursor() as cur:
                                 cur.execute(
                                     "SELECT id, question_text, option_a, option_b, option_c, option_d, correct_option "
-                                    "FROM quiz_questions WHERE package_id = %s ORDER BY id ASC",
+                                    "FROM quizzes WHERE lesson_id = %s ORDER BY id ASC",
                                     (selected_pkg_id,),
                                 )
                                 questions = cur.fetchall()
