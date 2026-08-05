@@ -842,7 +842,6 @@ else:
                     f"Hal-hazırda {student_class}-ci sinif üçün aktiv quiz paketi yoxdur."
                 )
             else:
-                # 1. Şagirdin sinfinə uyğun paket seçimi
                 pkg_options = {
                     f"{p[1]} ({p[2]} - {p[3]} dəq)": p[0] for p in pkg_list
                 }
@@ -851,13 +850,13 @@ else:
                 )
                 selected_pkg_id = pkg_options[selected_pkg_title]
 
-                # 2. 3 günlük limitin yoxlanılması
+                # ⏳ LIMIT YOXLAMASI
                 is_locked, time_left = check_quiz_lock_status(
                     student_id, selected_pkg_id
                 )
 
                 if is_locked:
-                    # 🔒 İmtahan kilitlidirsə, YALNIZ xəbərdarlıq çıxır
+                    # 🔒 KİLİTLİDİRSƏ YALNIZ BİLDİRİŞ ÇIXIR (Aşağıda heç bir kod icra olunmur)
                     st.warning(
                         f"⏳ Bu imtahanı yaxınlarda tamamlamısınız. 3 günlük limit qaydasına əsasən təkrar cəhd üçün **{time_left}** gözləməlisiniz."
                     )
@@ -866,7 +865,7 @@ else:
                     )
 
                 else:
-                    # 🔓 YALNIZ imtahan açıq olduqda questions dəyişəni yaradılır və yoxlanılır
+                    # 🔓 AÇIQDIRSA QUESTIONS DƏYİŞƏNİ MƏHZ BURADA YARADILIR
                     conn = get_db_connection()
                     questions = []
                     if conn:
@@ -883,7 +882,7 @@ else:
                         finally:
                             conn.close()
 
-                    # ⚠️ BURA DİQQƏT: 'if not questions:' MÜTLƏQ BU 'ELSE'İN İÇİNDƏ OLMALIDIR
+                    # ⚠️ 'if not questions:' dəqiq olaraq bu ELSE-in İÇİNDƏ olmalıdır!
                     if not questions:
                         st.warning("Bu paketdə hələ ki heç bir sual yaradılmayıb.")
                     else:
