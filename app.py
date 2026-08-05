@@ -857,15 +857,16 @@ else:
                 )
 
                 if is_locked:
-                    # 🔒 İmtahan kilitli olduqda YALNIZ xəbərdarlıq görünür (Suallar kəsilir)
+                    # 🔒 İmtahan kilitlidirsə, YALNIZ xəbərdarlıq çıxır
                     st.warning(
                         f"⏳ Bu imtahanı yaxınlarda tamamlamısınız. 3 günlük limit qaydasına əsasən təkrar cəhd üçün **{time_left}** gözləməlisiniz."
                     )
                     st.info(
                         "💡 İmtahan nəticələrinizə və səhvlərinizə 'Əsas Səhifə / Score Board' bölməsindən baxa bilərsiniz."
                     )
+
                 else:
-                    # 🔓 İmtahan açıq olduqda suallar və imtahan formu yüklənir
+                    # 🔓 YALNIZ imtahan açıq olduqda questions dəyişəni yaradılır və yoxlanılır
                     conn = get_db_connection()
                     questions = []
                     if conn:
@@ -882,6 +883,7 @@ else:
                         finally:
                             conn.close()
 
+                    # ⚠️ BURA DİQQƏT: 'if not questions:' MÜTLƏQ BU 'ELSE'İN İÇİNDƏ OLMALIDIR
                     if not questions:
                         st.warning("Bu paketdə hələ ki heç bir sual yaradılmayıb.")
                     else:
@@ -925,7 +927,6 @@ else:
                                     (correct_cnt / total_q) * 100, 2
                                 )
 
-                                # Nəticəni bazaya yazırıq
                                 conn = get_db_connection()
                                 if conn:
                                     try:
