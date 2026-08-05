@@ -817,47 +817,56 @@ else:
         # 3. STUDENT QUIZZES
         # -----------------------------------------------------
         elif s_menu == "📝 Quizlər və İmtahanlar":
-         st.header("📝 İmtahanlar və Testlər")
+            st.header("📝 İmtahanlar və Testlər")
 
-        student_id = st.session_state.user["id"]
-        student_class = st.session_state.user.get("class_level", 9)
+            student_id = st.session_state.user["id"]
+            student_class = st.session_state.user.get("class_level", 9)
 
-        conn = get_db_connection()
-        pkg_list = []
-        if conn:
-            try:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT id, title, difficulty_level, time_limit FROM quiz_packages WHERE class_level = %s ORDER BY id DESC",
-                        (student_class,),
-                    )
-                    pkg_list = cur.fetchall()
-            except Exception as e:
-                st.error(f"Xəta: {e}")
-            finally:
-                conn.close()
+            conn = get_db_connection()
+            pkg_list = []
+            if conn:
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT id, title, difficulty_level, time_limit FROM quiz_packages WHERE class_level = %s ORDER BY id DESC",
+                            (student_class,),
+                        )
+                        pkg_list = cur.fetchall()
+                except Exception as e:
+                    st.error(f"Xəta: {e}")
+                finally:
+                    conn.close()
 
-        if not pkg_list:
-            st.info(f"Hal-hazırda {student_class}-ci sinif üçün aktiv quiz paketi yoxdur.")
-        else:
-            pkg_options = {f"{p[1]} ({p[2]} - {p[3]} dəq)": p[0] for p in pkg_list}
-            selected_pkg_title = st.selectbox(
-                "İmtahan paketini seçin:", list(pkg_options.keys())
-            )
-            selected_pkg_id = pkg_options[selected_pkg_title]
-
-            # ⏳ 3 GÜNLÜK VAXT MƏHDUDİYYƏTİ YOXLAMASI
-            is_locked, time_left = check_quiz_lock_status(student_id, selected_pkg_id)
-
-            if is_locked:
-                st.warning(
-                    f"⏳ Bu imtahanı yaxınlarda tamamlamısınız. 3 günlük limit qaydasına əsasən təkrar cəhd üçün **{time_left}** gözləməlisiniz."
-                )
+            if not pkg_list:
                 st.info(
-                    "💡 İmtahan nəticələrinizə və səhvlərinizə 'Əsas Səhifə' bölməsindən baxa bilərsiniz."
+                    f"Hal-hazırda {student_class}-ci sinif üçün aktiv quiz paketi yoxdur."
                 )
             else:
-                # Kilitli deyilsə buradan aşağı sizin mövcud sualları çəkmə kodunuz davam edir...
+                pkg_options = {
+                    f"{p[1]} ({p[2]} - {p[3]} dəq)": p[0] for p in pkg_list
+                }
+
+                # 1. Selectbox məhz burada (şagird menyusunun daxilində) olmalıdır
+                selected_pkg_title = st.selectbox(
+                    "İmtahan paketini seçin:", list(pkg_options.keys())
+                )
+                selected_pkg_id = pkg_options[selected_pkg_title]
+
+                # 2. Limit yoxlaması da məhz bu selectbox-dan sonra işləməlidir
+                is_locked, time_left = check_quiz_lock_status(
+                    student_id, selected_pkg_id
+                )
+
+                if is_locked:
+                    st.warning(
+                        f"⏳ Bu imtahanı yaxınlarda tamamlamısınız. 3 günlük limit qaydasına əsasən təkrar cəhd üçün **{time_left}** gözləməlisiniz."
+                    )
+                    st.info(
+                        "💡 İmtahan nəticələrinizə və səhvlərinizə 'Əsas Səhifə' bölməsindən baxa bilərsiniz."
+                    )
+                else:
+                    st.success("İmtahana başlaya bilərsiniz!")
+                    # Sualları göstərən kodlarınız...
 
                 # Sualları çəkirik
                 conn = get_db_connection()
