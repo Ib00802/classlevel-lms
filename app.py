@@ -23,6 +23,7 @@ def show_detailed_results_dialog(
 # ==========================================
 # QUİZ LİMİTİNİ YOXLAYAN FUNKSİYA (3 GÜN)
 # ==========================================
+from datetime import datetime, timezone
 def check_quiz_lock_status(student_id, package_id):
     conn = get_db_connection()
     is_locked = False
@@ -35,10 +36,29 @@ def check_quiz_lock_status(student_id, package_id):
                     (student_id, package_id),
                 )
                 result = cur.fetchone()
-                if result:
+                if result and result[0]:
                     last_attempt = result[0]
-                    cur.execute("SELECT NOW()")
+
+                    # Əgər bazadan gələn dəyər string-dirsə datetime-a çeviririk
+                    if isinstance(last_attempt, str):
+                        last_attempt = datetime.fromisoformat(
+                            last_attempt.replace("Z", "+00:00")
+                        )
+
+                    # Timezone fərqini neytrallaşdırırıq (Naive UTC edirik)
+                    if (
+                        hasattr(last_attempt, "tzinfo")
+                        and last_attempt.tzinfo is not None
+                    ):
+                        last_attempt = last_attempt.astimezone(
+                            timezone.utc
+                        ).replace(tzinfo=None)
+
+                    # Hazırkı vaxtı da Naive UTC götürürük
+                    cur.execute("SELECT NOW() AT TIME ZONE 'UTC'")
                     now = cur.fetchone()[0]
+                    if hasattr(now, "tzinfo") and now.tzinfo is not None:
+                        now = now.replace(tzinfo=None)
 
                     time_diff = now - last_attempt
                     total_seconds_passed = time_diff.total_seconds()
@@ -53,6 +73,8 @@ def check_quiz_lock_status(student_id, package_id):
                             time_left_str = f"{hours // 24} gün {hours % 24} saat {minutes} dəq"
                         else:
                             time_left_str = f"{hours} saat {minutes} dəq"
+        except Exception as e:
+            st.error(f"Limit yoxlanarkən xəta: {e}")
         finally:
             conn.close()
     return is_locked, time_left_str
