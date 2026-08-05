@@ -850,13 +850,13 @@ else:
                 )
                 selected_pkg_id = pkg_options[selected_pkg_title]
 
-                # ⏳ LIMIT YOXLAMASI
+                # ⏳ Limit yoxlaması
                 is_locked, time_left = check_quiz_lock_status(
                     student_id, selected_pkg_id
                 )
 
                 if is_locked:
-                    # 🔒 KİLİTLİDİRSƏ YALNIZ BİLDİRİŞ ÇIXIR (Aşağıda heç bir kod icra olunmur)
+                    # 🔒 İmtahan kilitli olduqda YALNIZ bu mesajlar çıxır və kod burada dayanır
                     st.warning(
                         f"⏳ Bu imtahanı yaxınlarda tamamlamısınız. 3 günlük limit qaydasına əsasən təkrar cəhd üçün **{time_left}** gözləməlisiniz."
                     )
@@ -865,7 +865,7 @@ else:
                     )
 
                 else:
-                    # 🔓 AÇIQDIRSA QUESTIONS DƏYİŞƏNİ MƏHZ BURADA YARADILIR
+                    # 🔓 İmtahan açıq olduqda suallar MƏHZ BU ELSE İÇİNDƏ çəkilir və yoxlanır
                     conn = get_db_connection()
                     questions = []
                     if conn:
@@ -882,7 +882,6 @@ else:
                         finally:
                             conn.close()
 
-                    # ⚠️ 'if not questions:' dəqiq olaraq bu ELSE-in İÇİNDƏ olmalıdır!
                     if not questions:
                         st.warning("Bu paketdə hələ ki heç bir sual yaradılmayıb.")
                     else:
