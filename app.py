@@ -605,78 +605,85 @@ else:
                         else:
                             st.warning("Quiz paketinin adını daxil edin.")
 
-            with sub_t2:
-                conn = get_db_connection()
-                packages = []
-                materials_list = []
+            # 1. Müəllim panelində mövcud paketləri bazadan çəkirik
+            conn = get_db_connection()
+            pkg_list = []
+            if conn:
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT id, title, class_level FROM quiz_packages ORDER BY id DESC"
+                        )
+                        pkg_list = cur.fetchall()
+                except Exception as e:
+                    st.error(f"Paketlər yüklənərkən xəta: {e}")
+                finally:
+                    conn.close()
 
-                if conn:
-                    try:
-                        with conn.cursor() as cur:
-                            # Quiz paketlərini çəkirik
-                            cur.execute(
-                                "SELECT id, title, class_level, difficulty_level, time_limit FROM quiz_packages ORDER BY id DESC")
-                            packages = cur.fetchall()
+            if not pkg_list:
+                st.warning("Hələ heç bir quiz paketi yaradılmayıb. Əvvəlcə paket yaradın.")
+            else:
+                # 2. Seçim qutusunu qururuq
+                pkg_options = {f"{p[1]} ({p[2]}-ci sinif)": p[0] for p in pkg_list}
+                pkg_titles_map = {p[0]: p[1] for p in pkg_list}
 
-                            # Mövcud dərs materiallarını (lessons) çəkirik
-                            cur.execute("SELECT id, title, class_level FROM materials ORDER BY class_level, title")
-                            materials_list = cur.fetchall()
-                    except Exception as e:
-                        st.error(f"Məlumatlar yüklənərkən xəta: {e}")
-                    finally:
-                        conn.close()
+                # Dəyişənlər burada təyin olunur (Unresolved reference xətası aradan qalxır)
+                selected_pkg_label = st.selectbox(
+                    "Sualların əlavə ediləcəyi paketi seçin:", list(pkg_options.keys())
+                )
+                selected_pkg_id = pkg_options[selected_pkg_label]
+                selected_pkg_title = pkg_titles_map[selected_pkg_id]
 
-                if not packages:
-                    st.info("Əvvəlcə 'Yeni Quiz Paketi Yarat' bölməsindən paket yaradın.")
-                elif not materials_list:
-                    st.warning(
-                        "Əvvəlcə 'Materiallar' bölməsindən azı bir dərs materialı əlavə edin ki, sualı həmin dərsə bağlaya bilərsiniz.")
-                else:
-                    pkg_dict = {f"{p[1]} ({p[2]}-ci sinif - {p[3]} - {p[4]} dəq)": p[0] for p in packages}
-                    mat_dict = {f"{m[1]} ({m[2]}-ci sinif)": m[0] for m in materials_list}
+                # 3. Sual daxil etmə formu
+                with st.form("add_question_form"):
+                    q_text = st.text_area("Sualın mətni:")
+                    opt_a = st.text_input("A varianti:")
+                    opt_b = st.text_input("B varianti:")
+                    opt_c = st.text_input("C varianti:")
+                    opt_d = st.text_input("D varianti:")
+                    correct_opt = st.selectbox("Düzgün cavab:", ["A", "B", "C", "D"])
 
-                    selected_pkg_name = st.selectbox("Sual əlavə olunacaq paketi seçin:", list(pkg_dict.keys()))
-                    target_pkg_id = pkg_dict[selected_pkg_name]
+                    submitted = st.form_submit_button("Sualı Əlavə Et")
 
-                    # Sualın aid olacağı dərsi/materialı seçirik
-                    selected_mat_name = st.selectbox("Sualın aid olduğu dərsi (mövzunu) seçin:", list(mat_dict.keys()))
-                    target_lesson_id = mat_dict[selected_mat_name]
-
-                    with st.form("add_question_form_complete", clear_on_submit=True):
-                        st.markdown("#### Sual Məlumatları")
-                        q_text = st.text_area("Sualın mətni:")
-                        opt_a = st.text_input("A variantı:")
-                        opt_b = st.text_input("B variantı:")
-                        opt_c = st.text_input("C variantı:")
-                        opt_d = st.text_input("D variantı:")
-                        correct_opt = st.selectbox("Doğru Cavab:", ["A", "B", "C", "D"])
-
-                        if st.form_submit_button("Sualı Əlavə Et"):
-                            if q_text and opt_a and opt_b and opt_c and opt_d:
-                                conn = get_db_connection()
-                                if conn:
-                                    try:
-                                        with conn.cursor() as cur:
-                                            # lesson_id artıq məcburi olaraq INSERT edilir!
-                                            cur.execute("""
-                                                INSERT INTO quizzes (quiz_package_id, question_text, option_a, option_b, option_c, option_d, correct_option, lesson_id)
-                                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                                            """, (
-                                                target_pkg_id,
-                                                q_text.strip(),
-                                                opt_a.strip(),
-                                                opt_b.strip(),
-                                                opt_c.strip(),
-                                                opt_d.strip(),
+                    if submitted:
+                        if not q_text or not opt_a or not opt_b or not opt_c or not opt_d:
+                            st.error("Lütfən bütün xanaları doldurun!")
+                        else:
+                            conn = get_db_connection()
+                            if conn:
+                                try:
+                                    with conn.cursor() as cur:
+                                        cur.execute(
+                                            """
+                                            INSERT INTO quizzes (
+                                                lesson_id, 
+                                                quiz_title, 
+                                                question_text, 
+                                                option_a, 
+                                                option_b, 
+                                                option_c, 
+                                                option_d, 
+                                                correct_option
+                                            ) 
+                                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                            """,
+                                            (
+                                                selected_pkg_id,
+                                                selected_pkg_title,
+                                                q_text,
+                                                opt_a,
+                                                opt_b,
+                                                opt_c,
+                                                opt_d,
                                                 correct_opt,
-                                                target_lesson_id  # Mövzunun ID-si göndərilir
-                                            ))
-                                        conn.commit()
-                                        st.success("Sual dərslə əlaqələndirilərək uğurla əlavə olundu!")
-                                    except Exception as e:
-                                        st.error(f"Xəta: {e}")
-                                    finally:
-                                        conn.close()
+                                            ),
+                                        )
+                                    conn.commit()
+                                    st.success("Sual uğurla əlavə olundu!")
+                                except Exception as e:
+                                    st.error(f"Sual əlavə olunarkən xəta: {e}")
+                                finally:
+                                    conn.close()
                             else:
                                 st.warning("Bütün xanaları doldurun.")
 
