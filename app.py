@@ -690,7 +690,7 @@ else:
                 finally:
                     conn.close()
         # Müəllim paneli üçün tab-lar
-        tab_add, tab_manage, tab_scores = st.tabs(
+        tab_manage, tab_scores = st.tabs(
             [ "⚙️ Sualları İdarə Et", "📊 Şagird Nəticələri"]
         )
 
