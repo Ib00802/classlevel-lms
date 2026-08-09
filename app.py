@@ -23,60 +23,56 @@ def show_detailed_results_dialog(
 # ==========================================
 # QUİZ LİMİTİNİ YOXLAYAN FUNKSİYA (3 GÜN)
 # ==========================================
-from datetime import datetime, timezone
-def check_quiz_lock_status(student_id, package_id):
+from datetime import datetime, timedelta
+
+
+def check_quiz_lock_status(student_id, package_id, lock_days=3):
+    """
+    Şagirdin müəyyən paketi son 'lock_days' gün ərzində işləyib-işləmədiyini yoxlayır.
+    """
     conn = get_db_connection()
     is_locked = False
     time_left_str = ""
+
     if conn:
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT created_at FROM quiz_results WHERE student_id = %s AND package_id = %s",
-                    (student_id, package_id),
-                )
+                # Mütləq həm student_id, həm də package_id üzrə ən son nəticəni çəkirik
+                cur.execute("""
+                    SELECT completed_at, created_at 
+                    FROM quiz_results 
+                    WHERE student_id = %s AND package_id = %s 
+                    ORDER BY id DESC LIMIT 1
+                """, (student_id, package_id))
+
                 result = cur.fetchone()
-                if result and result[0]:
-                    last_attempt = result[0]
 
-                    # Əgər bazadan gələn dəyər string-dirsə datetime-a çeviririk
-                    if isinstance(last_attempt, str):
-                        last_attempt = datetime.fromisoformat(
-                            last_attempt.replace("Z", "+00:00")
-                        )
+                if result:
+                    # completed_at və ya created_at sütununu götürürük
+                    last_completed = result[0] or result[1]
 
-                    # Timezone fərqini neytrallaşdırırıq (Naive UTC edirik)
-                    if (
-                        hasattr(last_attempt, "tzinfo")
-                        and last_attempt.tzinfo is not None
-                    ):
-                        last_attempt = last_attempt.astimezone(
-                            timezone.utc
-                        ).replace(tzinfo=None)
+                    if last_completed:
+                        # timezone fərqini aradan qaldırmaq üçün naive datetime-a çeviririk
+                        if hasattr(last_completed, 'tzinfo') and last_completed.tzinfo is not None:
+                            last_completed = last_completed.replace(tzinfo=None)
 
-                    # Hazırkı vaxtı da Naive UTC götürürük
-                    cur.execute("SELECT NOW() AT TIME ZONE 'UTC'")
-                    now = cur.fetchone()[0]
-                    if hasattr(now, "tzinfo") and now.tzinfo is not None:
-                        now = now.replace(tzinfo=None)
+                        now = datetime.now()
+                        lock_until = last_completed + timedelta(days=lock_days)
 
-                    time_diff = now - last_attempt
-                    total_seconds_passed = time_diff.total_seconds()
-                    three_days_in_seconds = 3 * 24 * 3600
+                        if now < lock_until:
+                            is_locked = True
+                            remaining = lock_until - now
 
-                    if total_seconds_passed < three_days_in_seconds:
-                        is_locked = True
-                        rem_sec = three_days_in_seconds - total_seconds_passed
-                        hours = int(rem_sec // 3600)
-                        minutes = int((rem_sec % 3600) // 60)
-                        if hours >= 24:
-                            time_left_str = f"{hours // 24} gün {hours % 24} saat {minutes} dəq"
-                        else:
-                            time_left_str = f"{hours} saat {minutes} dəq"
+                            days = remaining.days
+                            hours, remainder = divmod(remaining.seconds, 3600)
+                            minutes, _ = divmod(remainder, 60)
+
+                            time_left_str = f"{days} gün {hours} saat {minutes} dəq"
         except Exception as e:
             st.error(f"Limit yoxlanarkən xəta: {e}")
         finally:
             conn.close()
+
     return is_locked, time_left_str
 
     def save_quiz_result(
