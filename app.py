@@ -829,11 +829,12 @@ else:
                             selected_pkg_label = st.selectbox(
                                 "Sualların əlavə ediləcəyi paketi seçin:",
                                 list(pkg_options.keys()),
+                                key="select_pkg_for_add_question_unique",
                             )
 
                             selected_pkg_id, selected_pkg_title = pkg_options[selected_pkg_label]
 
-                            # Yuxarıda yaratdığımız tək funksiyanı çağırırıq:
+                            # Yuxarıda yaratdığımız təknik funksiyanı çağırırıq:
                             render_add_question_form(selected_pkg_id, selected_pkg_title)
                         else:
                             st.info(
