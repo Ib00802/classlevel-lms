@@ -775,38 +775,49 @@ else:
             tab1, tab2 = st.tabs(["📦 Yeni Quiz Paketi Yarat", "➕ Paketə Sual Əlavə Et"])
 
             # --- TAB 1: Yalnız Paket Yaratmaq Üçün ---
-            with tab1:
+            # --- TAB 1: Yalnız Quiz Paketinin Yaradılması ---
+            with tab1:  # Və ya kodunuzda bu tabın adı nədirsə (məsələn: tab1)
                 st.subheader("Yeni Quiz Paketi Yarat")
 
-                pkg_title = st.text_input("Quiz Paketinin Adı:")
-                pkg_class = st.selectbox("Aid Olduğu Sinif:", [5, 6, 7, 8, 9, 10, 11])
-                pkg_diff = st.selectbox("Çətinlik Səviyyəsi:", ["Asan", "Orta", "Çətin"])
-                pkg_duration = st.number_input(
-                    "İşləmə Müddəti (dəqiqə ilə):", min_value=1, value=15
-                )
+                with st.form(key="create_package_form", clear_on_submit=True):
+                    pkg_title = st.text_input("Quiz Paketinin Adı:")
+                    pkg_class = st.selectbox("Aid Olduğu Sinif:", [5, 6, 7, 8, 9, 10, 11])
+                    pkg_diff = st.selectbox("Çətinlik Səviyyəsi:", ["Asan", "Orta", "Çətin"])
+                    pkg_duration = st.number_input(
+                        "İşləmə Müddəti (dəqiqə ilə):", min_value=1, value=15
+                    )
 
-                if st.button("Quiz Paketini Yarat"):
-                    if not pkg_title:
-                        st.warning("Lütfən paket adını daxil edin!")
-                    else:
-                        conn = get_db_connection()
-                        if conn:
-                            try:
-                                with conn.cursor() as cur:
-                                    cur.execute(
-                                        """
-                                        INSERT INTO quiz_packages (title, class_level, difficulty, duration_minutes) 
-                                        VALUES (%s, %s, %s, %s)
-                                        """,
-                                        (pkg_title, pkg_class, pkg_diff, pkg_duration),
+                    submit_pkg = st.form_submit_button("Quiz Paketini Yarat")
+
+                    if submit_pkg:
+                        if not pkg_title.strip():
+                            st.warning("Lütfən paket adını daxil edin!")
+                        else:
+                            conn = get_db_connection()
+                            if conn:
+                                try:
+                                    with conn.cursor() as cur:
+                                        cur.execute(
+                                            """
+                                            INSERT INTO quiz_packages (title, class_level, difficulty, duration_minutes) 
+                                            VALUES (%s, %s, %s, %s)
+                                            """,
+                                            (
+                                                pkg_title.strip(),
+                                                pkg_class,
+                                                pkg_diff,
+                                                pkg_duration,
+                                            ),
+                                        )
+                                    conn.commit()
+                                    st.success(
+                                        f"'{pkg_title}' paketi uğurla yaradıldı! "
+                                        "Sualları daxil etmək üçün 'Paketə Sual Əlavə Et' tabına keçin."
                                     )
-                                conn.commit()
-                                st.success(
-                                    "Quiz paketi uğurla yaradıldı! İndi 'Paketə Sual Əlavə Et' tabından sualları daxil edə bilərsiniz.")
-                            except Exception as e:
-                                st.error(f"Paket yaradılarkən xəta: {e}")
-                            finally:
-                                conn.close()
+                                except Exception as e:
+                                    st.error(f"Paket yaradılarkən xəta baş verdi: {e}")
+                                finally:
+                                    conn.close()
 
             # --- TAB 2: Yalnız Mövcud Paketlərə Sual Əlavə Etmək Üçün ---
             with tab2:
