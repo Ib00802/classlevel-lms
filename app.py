@@ -691,7 +691,7 @@ else:
                     conn.close()
         # Müəllim paneli üçün tab-lar
         tab_add, tab_manage, tab_scores = st.tabs(
-            ["➕ Yeni Sual Əlavə Et", "⚙️ Sualları İdarə Et", "📊 Şagird Nəticələri"]
+            [ "⚙️ Sualları İdarə Et", "📊 Şagird Nəticələri"]
         )
 
         with tab_manage:
