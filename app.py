@@ -305,14 +305,15 @@ def render_add_question_form(selected_package_id, selected_package_title=""):
                             cur.execute(
                                 """
                                 INSERT INTO quizzes (
-                                    lesson_id, quiz_title, question_text, 
+                                    lesson_id, quiz_package_id, quiz_title, question_text, 
                                     option_a, option_b, option_c, option_d, 
                                     correct_option, solution
-                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                """,
+                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            """,
                                 (
-                                    selected_package_id,
-                                    selected_package_title,
+                                    selected_pkg_id,
+                                    selected_pkg_id,  # hər ikisinə eyni ID gedir
+                                    selected_pkg_title,
                                     q_text,
                                     opt_a,
                                     opt_b,
@@ -1047,9 +1048,14 @@ else:
                     if conn:
                         try:
                             with conn.cursor() as cur:
+                                # Şagird panelində sualları çəkən sorğunu bu şəkildə dəqiqləşdirin:
                                 cur.execute(
-                                    "SELECT id, question_text, option_a, option_b, option_c, option_d, correct_option , solution"
-                                    "FROM quizzes WHERE lesson_id = %s ORDER BY id ASC",
+                                    """
+                                    SELECT id, question_text, option_a, option_b, option_c, option_d, correct_option, solution 
+                                    FROM quizzes 
+                                    WHERE lesson_id = %s 
+                                    ORDER BY id ASC
+                                """,
                                     (selected_pkg_id,),
                                 )
                                 questions = cur.fetchall()
