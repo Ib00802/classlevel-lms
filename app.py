@@ -1175,15 +1175,17 @@ else:
                                 "İmtahanı Tamamla və Nəticəni Gör"
                             )
 
+                            # 2. Formun təhvil verilməsi hissəsini (submitted) bu şəkildə saxlayın:
                             if submitted:
-                                # 1. Vaxt fərqini hesablayırıq
+                                student_id = st.session_state.user["id"]
+                                student_name = st.session_state.user[
+                                    "full_name"
+                                ]  # <-- Bu sətri əlavə edin
+                                student_class = st.session_state.user["class_level"]
+                                # Vaxt hesabı
                                 end_time = time.time()
-                                elapsed_seconds = int(
-                                    end_time - st.session_state.get("start_time", end_time)
-                                )
-
-                                if "start_time" in st.session_state:
-                                    del st.session_state["start_time"]
+                                start_time = st.session_state.get("start_time", end_time)
+                                elapsed_seconds = int(end_time - start_time)
 
                                 minutes = elapsed_seconds // 60
                                 seconds = elapsed_seconds % 60
@@ -1194,7 +1196,6 @@ else:
                                 wrong_cnt = 0
                                 blank_cnt = 0
 
-                                # 2. Cavabların təhlili və sayılması
                                 for q in questions:
                                     q_id = q[0]
                                     correct_opt = q[6]
@@ -1211,27 +1212,15 @@ else:
                                     round((correct_cnt / total_q) * 100, 1) if total_q > 0 else 0.0
                                 )
 
-                                # 3. Məlumatların toplanması
-                                student_id = st.session_state.user["id"]
-                                student_name = st.session_state.user["full_name"]
-                                student_class = st.session_state.user["class_level"]
-                                quiz_title = selected_pkg_title
-
-                                # 4. Bazaya Saxlanma Hissəsi (ƏN ƏSAS DÜZƏLİŞ BURADADIR)
+                                # Bazaya yazma
                                 conn = get_db_connection()
                                 if conn:
                                     try:
                                         with conn.cursor() as cur:
-                                            # A) Bu şagirdin bu paket üzrə VARSA bütün köhnə nəticələrini silirik
                                             cur.execute(
-                                                """
-                                                DELETE FROM quiz_results 
-                                                WHERE student_id = %s AND package_id = %s
-                                            """,
+                                                "DELETE FROM quiz_results WHERE student_id = %s AND package_id = %s",
                                                 (student_id, selected_pkg_id),
                                             )
-
-                                            # B) Birbaşa yenisini əlavə edirik (created_at və completed_at daxil olmaqla)
                                             cur.execute(
                                                 """
                                                 INSERT INTO quiz_results (
@@ -1244,7 +1233,7 @@ else:
                                                     student_id,
                                                     student_name,
                                                     student_class,
-                                                    quiz_title,
+                                                    selected_pkg_title,
                                                     correct_cnt,
                                                     total_q,
                                                     percentage_score,
@@ -1256,6 +1245,18 @@ else:
                                         st.error(f"Nəticə yadda saxlanılarkən xəta: {e}")
                                     finally:
                                         conn.close()
+
+                                # Yalnız hər şey uğurla tamamlandıqda dialogu çağırırıq:
+                                show_detailed_results_dialog(
+                                    percentage_score,
+                                    total_q,
+                                    correct_cnt,
+                                    wrong_cnt,
+                                    blank_cnt,
+                                    time_spent_str,
+                                    user_answers,
+                                    questions,
+                                )
 
                                 # 5. DİALOG PƏNCƏRƏSİNİ ÇAĞIRIRIQ
                                 show_detailed_results_dialog(
