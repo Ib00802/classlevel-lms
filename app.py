@@ -275,12 +275,12 @@ def get_db_connection():
         st.error(f"Verilənlər bazasına qoşulma xətası: {e}")
         return None
 def render_add_question_form(selected_package_id, selected_package_title=""):
-    """
-    Sual daxil etmə formasını və bazaya yazma məntiqini tək bir yerdən idarə edir.
-    """
     st.markdown(f"### 📝 **{selected_package_title}** üçün sual əlavə edin")
 
-    with st.form(key=f"add_question_form_{selected_package_id}"):
+    # clear_on_submit=True düyməyə kliklədikdə xanaları sıfırlayır
+    with st.form(
+        key=f"add_question_form_{selected_package_id}", clear_on_submit=True
+    ):
         q_text = st.text_area("Sualın mətni:")
         opt_a = st.text_input("A variantı:")
         opt_b = st.text_input("B variantı:")
@@ -323,8 +323,7 @@ def render_add_question_form(selected_package_id, selected_package_title=""):
                                 ),
                             )
                         conn.commit()
-                        st.success("Sual uğurla paketə əlavə olundu!")
-                        st.rerun()
+                        st.success("Sual uğurla paketə əlavə olundu! Növbəti sualı daxil edə bilərsiniz.")
                     except Exception as e:
                         st.error(f"Sual əlavə edilərkən xəta: {e}")
                     finally:
@@ -826,6 +825,7 @@ else:
                             pkg_options = {
                                 f"{p[1]} ({p[2]}-ci sinif)": (p[0], p[1]) for p in packages
                             }
+
                             selected_pkg_label = st.selectbox(
                                 "Sualların əlavə ediləcəyi paketi seçin:",
                                 list(pkg_options.keys()),
@@ -834,8 +834,9 @@ else:
 
                             selected_pkg_id, selected_pkg_title = pkg_options[selected_pkg_label]
 
-                            # Yuxarıda yaratdığımız təknik funksiyanı çağırırıq:
+                            # Tək formalı funksiyanı çağırırıq:
                             render_add_question_form(selected_pkg_id, selected_pkg_title)
+
                         else:
                             st.info(
                                 "Hələ heç bir paket yaradılmayıb. Əvvəlcə 'Yeni Quiz Paketi Yarat' bölməsindən paket yaradın."
