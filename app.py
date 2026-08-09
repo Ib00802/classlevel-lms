@@ -274,7 +274,61 @@ def get_db_connection():
     except Exception as e:
         st.error(f"Verilənlər bazasına qoşulma xətası: {e}")
         return None
+def render_add_question_form(selected_package_id, selected_package_title=""):
+    """
+    Sual daxil etmə formasını və bazaya yazma məntiqini tək bir yerdən idarə edir.
+    """
+    st.markdown(f"### 📝 **{selected_package_title}** üçün sual əlavə edin")
 
+    with st.form(key=f"add_question_form_{selected_package_id}"):
+        q_text = st.text_area("Sualın mətni:")
+        opt_a = st.text_input("A variantı:")
+        opt_b = st.text_input("B variantı:")
+        opt_c = st.text_input("C variantı:")
+        opt_d = st.text_input("D variantı:")
+        correct_opt = st.selectbox("Düzgün cavab:", ["A", "B", "C", "D"])
+        q_solution = st.text_area(
+            "Sualın həll yolu (izahı):",
+            help="İmtahan bitdikdə şagird bu izahı görəcək.",
+        )
+
+        submit_q = st.form_submit_button("Sualı Yadda Saxla")
+
+        if submit_q:
+            if not q_text or not opt_a or not opt_b or not opt_c or not opt_d:
+                st.warning("Zəhmət olmasa, sual mətni və bütün variantları doldurun!")
+            else:
+                conn = get_db_connection()
+                if conn:
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                """
+                                INSERT INTO quizzes (
+                                    lesson_id, quiz_title, question_text, 
+                                    option_a, option_b, option_c, option_d, 
+                                    correct_option, solution
+                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                """,
+                                (
+                                    selected_package_id,
+                                    selected_package_title,
+                                    q_text,
+                                    opt_a,
+                                    opt_b,
+                                    opt_c,
+                                    opt_d,
+                                    correct_opt,
+                                    q_solution,
+                                ),
+                            )
+                        conn.commit()
+                        st.success("Sual uğurla paketə əlavə olundu!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Sual əlavə edilərkən xəta: {e}")
+                    finally:
+                        conn.close()
 
 # Cədvəllərin yalnız bir dəfə yoxlanılması üçün keşləyirik
 @st.cache_resource
@@ -719,57 +773,76 @@ else:
 
         with m_t3:
             st.subheader("📝 Quiz Paketi və Sualların İdarə Edilməsi")
-            sub_t1, sub_t2 = st.tabs(
-                ["📦 Yeni Quiz Paketi Yarat", "➕ Paketə Sual Əlavə Et"]
-            )
+            tab1, tab2 = st.tabs(["📦 Yeni Quiz Paketi Yarat", "➕ Paketə Sual Əlavə Et"])
 
-            with sub_t1:
-                with st.form("create_quiz_pkg_complete"):
-                    pkg_title = st.text_input("Quiz Paketinin Adı:")
-                    pkg_class = st.selectbox(
-                        "Aid Olduğu Sinif:",
-                        list(range(1, 12)),
-                        index=8,
-                        key="pkg_cl_full",
-                    )
-                    pkg_difficulty = st.selectbox(
-                        "Çətinlik Səviyyəsi:", ["Asan", "Orta", "Çətin"]
-                    )
-                    pkg_time = st.number_input(
-                        "İşləmə Müddəti (dəqiqə ilə):",
-                        min_value=1,
-                        max_value=180,
-                        value=30,
-                    )
+            # --- TAB 1: Yalnız Paket Yaratmaq Üçün ---
+            with tab1:
+                st.subheader("Yeni Quiz Paketi Yarat")
 
-                    if st.form_submit_button("Quiz Paketini Yarat"):
-                        if pkg_title:
-                            conn = get_db_connection()
-                            if conn:
-                                try:
-                                    with conn.cursor() as cur:
-                                        cur.execute(
-                                            """
-                                            INSERT INTO quiz_packages (title, class_level, difficulty_level, time_limit)
-                                            VALUES (%s, %s, %s, %s)
+                pkg_title = st.text_input("Quiz Paketinin Adı:")
+                pkg_class = st.selectbox("Aid Olduğu Sinif:", [5, 6, 7, 8, 9, 10, 11])
+                pkg_diff = st.selectbox("Çətinlik Səviyyəsi:", ["Asan", "Orta", "Çətin"])
+                pkg_duration = st.number_input(
+                    "İşləmə Müddəti (dəqiqə ilə):", min_value=1, value=15
+                )
+
+                if st.button("Quiz Paketini Yarat"):
+                    if not pkg_title:
+                        st.warning("Lütfən paket adını daxil edin!")
+                    else:
+                        conn = get_db_connection()
+                        if conn:
+                            try:
+                                with conn.cursor() as cur:
+                                    cur.execute(
+                                        """
+                                        INSERT INTO quiz_packages (title, class_level, difficulty, duration_minutes) 
+                                        VALUES (%s, %s, %s, %s)
                                         """,
-                                            (
-                                                pkg_title.strip(),
-                                                int(pkg_class),
-                                                pkg_difficulty,
-                                                int(pkg_time),
-                                            ),
-                                        )
-                                    conn.commit()
-                                    st.success(
-                                        "Quiz paketi uğurla yaradıldı!"
+                                        (pkg_title, pkg_class, pkg_diff, pkg_duration),
                                     )
-                                except Exception as e:
-                                    st.error(f"Xəta: {e}")
-                                finally:
-                                    conn.close()
+                                conn.commit()
+                                st.success(
+                                    "Quiz paketi uğurla yaradıldı! İndi 'Paketə Sual Əlavə Et' tabından sualları daxil edə bilərsiniz.")
+                            except Exception as e:
+                                st.error(f"Paket yaradılarkən xəta: {e}")
+                            finally:
+                                conn.close()
+
+            # --- TAB 2: Yalnız Mövcud Paketlərə Sual Əlavə Etmək Üçün ---
+            with tab2:
+                st.subheader("Mövcud Paketə Sual Əlavə Et")
+
+                conn = get_db_connection()
+                if conn:
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "SELECT id, title, class_level FROM quiz_packages ORDER BY id DESC"
+                            )
+                            packages = cur.fetchall()
+
+                        if packages:
+                            pkg_options = {
+                                f"{p[1]} ({p[2]}-ci sinif)": (p[0], p[1]) for p in packages
+                            }
+                            selected_pkg_label = st.selectbox(
+                                "Sualların əlavə ediləcəyi paketi seçin:",
+                                list(pkg_options.keys()),
+                            )
+
+                            selected_pkg_id, selected_pkg_title = pkg_options[selected_pkg_label]
+
+                            # Yuxarıda yaratdığımız tək funksiyanı çağırırıq:
+                            render_add_question_form(selected_pkg_id, selected_pkg_title)
                         else:
-                            st.warning("Quiz paketinin adını daxil edin.")
+                            st.info(
+                                "Hələ heç bir paket yaradılmayıb. Əvvəlcə 'Yeni Quiz Paketi Yarat' bölməsindən paket yaradın."
+                            )
+                    except Exception as e:
+                        st.error(f"Paketlər yüklənərkən xəta: {e}")
+                    finally:
+                        conn.close()
 
             # 1. Müəllim panelində mövcud paketləri bazadan çəkirik
             conn = get_db_connection()
