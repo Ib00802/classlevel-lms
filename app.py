@@ -895,7 +895,7 @@ else:
             if conn:
                 try:
                     with conn.cursor() as cur:
-                        # Sadəcə daxil olan şagirdin nəticələrini çəkirik
+                        # Sadəcə daxil olan şagirdin nəticələərini çəkirik
                         cur.execute(
                             """
                             SELECT quiz_title, score, total_questions, percentage, created_at 
@@ -953,12 +953,12 @@ else:
 
                     if materials:
                         for (
-                            mat_title,
-                            mat_file,
-                            mat_video,
-                            mat_cs,
-                            mat_ss,
-                            mat_date,
+                                mat_title,
+                                mat_file,
+                                mat_video,
+                                mat_cs,
+                                mat_ss,
+                                mat_date,
                         ) in materials:
                             with st.container():
                                 st.markdown(f"### 📖 Mövzu: {mat_title}")
@@ -1063,6 +1063,89 @@ else:
                             st.error(f"Suallar yüklənərkən xəta: {e}")
                         finally:
                             conn.close()
+
+
+                    # --- NƏTİCƏ DİALOG FUNKSİYASI (Formdan və düymədən xaricdə elan edilir) ---
+                    @st.dialog("📊 İmtahan Nəticəsi və Ətraflı Analiz", width="large")
+                    def show_detailed_results_dialog(
+                            percentage_score,
+                            total_q,
+                            correct_cnt,
+                            wrong_cnt,
+                            blank_cnt,
+                            time_spent_str,
+                            user_answers,
+                            questions,
+                    ):
+                        # 1. Ümumi Statistika Metrikləri
+                        st.subheader(f"Ümumi Nəticəniz: **{percentage_score}%**")
+
+                        col1, col2, col3, col4 = st.columns(4)
+                        col1.metric("Sual Sayı", total_q)
+                        col2.metric("Düzgün", correct_cnt, delta=f"{correct_cnt} düz")
+                        col3.metric("Səhv", wrong_cnt, delta=f"-{wrong_cnt} səhv", delta_color="inverse")
+                        col4.metric("Boş", blank_cnt)
+
+                        st.caption(f"⏱️ **İstifadə olunan vaxt:** {time_spent_str}")
+                        st.divider()
+
+                        # 2. Sualların Ətraflı Analizi
+                        st.subheader("🔍 Suallar və Cavablarınız")
+
+                        for idx, q in enumerate(questions, 1):
+                            q_id = q[0]
+                            q_text = q[1]
+                            opts = {"A": q[2], "B": q[3], "C": q[4], "D": q[5]}
+                            correct_opt = q[6]
+
+                            q_solution = (
+                                q[7]
+                                if len(q) > 7 and q[7]
+                                else "Bu sual üçün daxil edilmiş xüsusi həll yolu yoxdur."
+                            )
+
+                            user_choice = user_answers.get(q_id, (None, None))[0]
+
+                            if user_choice is None:
+                                status_icon = "⚪"
+                                status_text = "Cavablandırılmayıb"
+                            elif user_choice == correct_opt:
+                                status_icon = "✅"
+                                status_text = "Düzgün"
+                            else:
+                                status_icon = "❌"
+                                status_text = "Səhv"
+
+                            with st.expander(
+                                    f"{status_icon} Sual {idx}: {q_text[:50]}... ({status_text})"
+                            ):
+                                st.markdown(f"**Sual {idx}:** {q_text}")
+
+                                for opt_key, opt_val in opts.items():
+                                    if opt_key == correct_opt and opt_key == user_choice:
+                                        st.success(
+                                            f"**{opt_key}) {opt_val}**  *(Sizin düzgün cavabınız)*"
+                                        )
+                                    elif opt_key == correct_opt:
+                                        st.info(f"**{opt_key}) {opt_val}**  *(Düzgün cavab)*")
+                                    elif opt_key == user_choice:
+                                        st.error(
+                                            f"**{opt_key}) {opt_val}**  *(Sizin yanlış cavabınız)*"
+                                        )
+                                    else:
+                                        st.write(f"{opt_key}) {opt_val}")
+
+                                st.write("")
+                                with st.popover("💡 Sualın həlli", use_container_width=False):
+                                    st.markdown("### 📝 Düzgün Həll Yolu:")
+                                    st.info(f"**Düzgün cavab:** {correct_opt}) {opts.get(correct_opt, '')}")
+                                    st.write(q_solution)
+
+                        st.divider()
+
+                        if st.button("Pəncərəni Bağla və Tamamla", use_container_width=True):
+                            st.rerun()
+
 
                     # SİZİN SEVDİYİNİZ VƏ İSTƏDİYİNİZ BÜTÜN FUNKSİONAL KOD BURADA:
                     if not questions:
@@ -1175,86 +1258,14 @@ else:
                                     finally:
                                         conn.close()
 
-
-                                @st.dialog("📊 İmtahan Nəticəsi və Ətraflı Analiz", width="large")
-                                def show_detailed_results_dialog(
-                                        percentage_score,
-                                        total_q,
-                                        correct_cnt,
-                                        wrong_cnt,
-                                        blank_cnt,
-                                        time_spent_str,
-                                        user_answers,
-                                        questions,
-                                ):
-                                    # 1. Ümumi Statistika Metrikləri
-                                    st.subheader(f"Ümumi Nəticəniz: **{percentage_score}%**")
-
-                                    col1, col2, col3, col4 = st.columns(4)
-                                    col1.metric("Sual Sayı", total_q)
-                                    col2.metric("Düzgün", correct_cnt, delta=f"{correct_cnt} düz")
-                                    col3.metric("Səhv", wrong_cnt, delta=f"-{wrong_cnt} səhv", delta_color="inverse")
-                                    col4.metric("Boş", blank_cnt)
-
-                                    st.caption(f"⏱️ **İstifadə olunan vaxt:** {time_spent_str}")
-                                    st.divider()
-
-                                    # 2. Sualların Ətraflı Analizi
-                                    st.subheader("🔍 Suallar və Cavablarınız")
-
-                                    for idx, q in enumerate(questions, 1):
-                                        # Bazadakı sütun sırasına uyğun: id, question_text, option_a, option_b, option_c, option_d, correct_option, solution
-                                        q_id = q[0]
-                                        q_text = q[1]
-                                        opts = {"A": q[2], "B": q[3], "C": q[4], "D": q[5]}
-                                        correct_opt = q[6]
-
-                                        # Əgər bazada solution (həll yolu) sütunu varsa (indeks 7), onu götürürük
-                                        q_solution = q[7] if len(q) > 7 and q[
-                                            7] else "Bu sual üçün daxil edilmiş xüsusi həll yolu yoxdur."
-
-                                        # İstifadəçinin cavabı
-                                        user_choice = user_answers.get(q_id, (None, None))[0]
-
-                                        # Status təyini
-                                        if user_choice is None:
-                                            status_icon = "⚪"
-                                            status_text = "Cavablandırılmayıb"
-                                        elif user_choice == correct_opt:
-                                            status_icon = "✅"
-                                            status_text = "Düzgün"
-                                        else:
-                                            status_icon = "❌"
-                                            status_text = "Səhv"
-
-                                        with st.expander(
-                                                f"{status_icon} Sual {idx}: {q_text[:50]}... ({status_text})"
-                                        ):
-                                            st.markdown(f"**Sual {idx}:** {q_text}")
-
-                                            for opt_key, opt_val in opts.items():
-                                                if opt_key == correct_opt and opt_key == user_choice:
-                                                    st.success(
-                                                        f"**{opt_key}) {opt_val}**  *(Sizin düzgün cavabınız)*"
-                                                    )
-                                                elif opt_key == correct_opt:
-                                                    st.info(f"**{opt_key}) {opt_val}**  *(Düzgün cavab)*")
-                                                elif opt_key == user_choice:
-                                                    st.error(
-                                                        f"**{opt_key}) {opt_val}**  *(Sizin yanlış cavabınız)*"
-                                                    )
-                                                else:
-                                                    st.write(f"{opt_key}) {opt_val}")
-
-                                            # 💡 Sualın Həlli Düyməsi
-                                            st.write("")
-                                            with st.popover("💡 Sualın həlli", use_container_width=False):
-                                                st.markdown("### 📝 Düzgün Həll Yolu:")
-                                                st.info(f"**Düzgün cavab:** {correct_opt}) {opts.get(correct_opt, '')}")
-                                                st.write(q_solution)
-
-                                    st.divider()
-
-                                    # 3. Bağlama düyməsi
-                                    if st.button("Pəncərəni Bağla və Tamamla", use_container_width=True):
-                                        st.rerun()
+                                # 5. DİALOG PƏNCƏRƏSİNİ ÇAĞIRIRIQ (Xətanı həll edən sətir)
+                                show_detailed_results_dialog(
+                                    percentage_score,
+                                    total_q,
+                                    correct_cnt,
+                                    wrong_cnt,
+                                    blank_cnt,
+                                    time_spent_str,
+                                    user_answers,
+                                    questions,
+                                )
