@@ -676,25 +676,40 @@ else:
             if conn:
                 try:
                     with conn.cursor() as cur:
+                        # r.user_id əvəzinə r.student_id istifadə edirik
                         cur.execute("""
-                            SELECT r.id, u.username, r.quiz_title, r.score_percentage, r.created_at 
+                            SELECT 
+                                r.id, 
+                                r.student_name, 
+                                r.class_level, 
+                                r.quiz_title, 
+                                r.score, 
+                                r.total_questions, 
+                                r.percentage, 
+                                r.created_at 
                             FROM quiz_results r
-                            JOIN users u ON r.user_id = u.id
                             ORDER BY r.created_at DESC
                         """)
                         results = cur.fetchall()
+
                         if results:
-                            st.dataframe(
+                            # Cədvəl sütunlarını səliqəli göstərmək üçün
+                            import pandas as pd
+
+                            df = pd.DataFrame(
                                 results,
-                                column_config={
-                                    "0": "ID",
-                                    "1": "Şagird",
-                                    "2": "İmtahan",
-                                    "3": "Nəticə (%)",
-                                    "4": "Tarix",
-                                },
-                                use_container_width=True,
+                                columns=[
+                                    "ID",
+                                    "Şagird",
+                                    "Sinif",
+                                    "İmtahan",
+                                    "Düzgün",
+                                    "Ümumi Sual",
+                                    "Nəticə (%)",
+                                    "Tarix",
+                                ],
                             )
+                            st.dataframe(df, use_container_width=True)
                         else:
                             st.info("Hələ heç bir imtahan nəticəsi yoxdur.")
                 except Exception as e:
