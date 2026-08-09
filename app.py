@@ -1183,8 +1183,7 @@ else:
                                 # 1. Vaxt fərqini hesablayırıq
                                 end_time = time.time()
                                 elapsed_seconds = int(
-                                    end_time
-                                    - st.session_state.get("start_time", end_time)
+                                    end_time - st.session_state.get("start_time", end_time)
                                 )
 
                                 if "start_time" in st.session_state:
@@ -1203,9 +1202,7 @@ else:
                                 for q in questions:
                                     q_id = q[0]
                                     correct_opt = q[6]
-                                    user_choice = user_answers.get(
-                                        q_id, (None, None)
-                                    )[0]
+                                    user_choice = user_answers.get(q_id, (None, None))[0]
 
                                     if user_choice is None:
                                         blank_cnt += 1
@@ -1215,9 +1212,7 @@ else:
                                         wrong_cnt += 1
 
                                 percentage_score = (
-                                    round((correct_cnt / total_q) * 100, 1)
-                                    if total_q > 0
-                                    else 0.0
+                                    round((correct_cnt / total_q) * 100, 1) if total_q > 0 else 0.0
                                 )
 
                                 # 3. Məlumatların toplanması
@@ -1226,12 +1221,12 @@ else:
                                 student_class = st.session_state.user["class_level"]
                                 quiz_title = selected_pkg_title
 
-                                # 4. Bazaya Saxlanma Hissəsi
+                                # 4. Bazaya Saxlanma Hissəsi (ƏN ƏSAS DÜZƏLİŞ BURADADIR)
                                 conn = get_db_connection()
                                 if conn:
                                     try:
                                         with conn.cursor() as cur:
-                                            # A) Köhnə nəticəni silirik
+                                            # A) Bu şagirdin bu paket üzrə VARSA bütün köhnə nəticələrini silirik
                                             cur.execute(
                                                 """
                                                 DELETE FROM quiz_results 
@@ -1240,23 +1235,43 @@ else:
                                                 (student_id, selected_pkg_id),
                                             )
 
-                                            # B) Yeni nəticəni yazırıq
-                                            save_quiz_result(
-                                                student_id,
-                                                student_name,
-                                                student_class,
-                                                quiz_title,
-                                                correct_cnt,
-                                                total_q,
-                                                percentage_score,
-                                                selected_pkg_id,
+                                            # B) Birbaşa yenisini əlavə edirik (created_at və completed_at daxil olmaqla)
+                                            cur.execute(
+                                                """
+                                                INSERT INTO quiz_results (
+                                                    student_id, student_name, class_level, quiz_title, 
+                                                    score, total_questions, percentage, package_id, 
+                                                    created_at, completed_at
+                                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                                            """,
+                                                (
+                                                    student_id,
+                                                    student_name,
+                                                    student_class,
+                                                    quiz_title,
+                                                    correct_cnt,
+                                                    total_q,
+                                                    percentage_score,
+                                                    selected_pkg_id,
+                                                ),
                                             )
+                                        conn.commit()
                                     except Exception as e:
-                                        st.error(
-                                            f"Nəticə yadda saxlanılarkən xəta: {e}"
-                                        )
+                                        st.error(f"Nəticə yadda saxlanılarkən xəta: {e}")
                                     finally:
                                         conn.close()
+
+                                # 5. DİALOG PƏNCƏRƏSİNİ ÇAĞIRIRIQ
+                                show_detailed_results_dialog(
+                                    percentage_score,
+                                    total_q,
+                                    correct_cnt,
+                                    wrong_cnt,
+                                    blank_cnt,
+                                    time_spent_str,
+                                    user_answers,
+                                    questions,
+                                )
 
                                 # 5. DİALOG PƏNCƏRƏSİNİ ÇAĞIRIRIQ (Xətanı həll edən sətir)
                                 show_detailed_results_dialog(
