@@ -689,94 +689,20 @@ else:
                     st.error(f"Xəta: {e}")
                 finally:
                     conn.close()
-        # Müəllim paneli üçün tab-lar
-        tab_manage, tab_scores = st.tabs(
-            [ "⚙️ Sualları İdarə Et", "📊 Şagird Nəticələri"]
-        )
-
-        with tab_manage:
-            st.subheader("Mövcud Sualların Redaktəsi və Silinməsi")
-            conn = get_db_connection()
-            if conn:
-                try:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "SELECT id, question_text, quiz_title FROM quizzes ORDER BY id DESC"
-                        )
-                        all_q = cur.fetchall()
-
-                    if all_q:
-                        q_dict = {f"ID {q[0]}: {q[1][:40]}... ({q[2]})": q[0] for q in all_q}
-                        selected_q_label = st.selectbox("İdarə ediləcək sualı seçin:", list(q_dict.keys()))
-                        selected_q_id = q_dict[selected_q_label]
-
-                        col_del, col_edit = st.columns([1, 4])
-                        with col_del:
-                            if st.button("🗑️ Sualı Sil", type="primary"):
-                                with conn.cursor() as cur:
-                                    cur.execute("DELETE FROM quizzes WHERE id = %s", (selected_q_id,))
-                                conn.commit()
-                                st.success("Sual bazadan silindi!")
-                                st.rerun()
-                except Exception as e:
-                    st.error(f"Xəta baş verdi: {e}")
-                finally:
-                    conn.close()
-
-        with tab_scores:
-            st.subheader("🏆 Şagirdlərin İmtahan Nəticələri")
-            conn = get_db_connection()
-            if conn:
-                try:
-                    with conn.cursor() as cur:
-                        # r.user_id əvəzinə r.student_id istifadə edirik
-                        cur.execute("""
-                            SELECT 
-                                r.id, 
-                                r.student_name, 
-                                r.class_level, 
-                                r.quiz_title, 
-                                r.score, 
-                                r.total_questions, 
-                                r.percentage, 
-                                r.created_at 
-                            FROM quiz_results r
-                            ORDER BY r.created_at DESC
-                        """)
-                        results = cur.fetchall()
-
-                        if results:
-                            # Cədvəl sütunlarını səliqəli göstərmək üçün
-                            import pandas as pd
-
-                            df = pd.DataFrame(
-                                results,
-                                columns=[
-                                    "ID",
-                                    "Şagird",
-                                    "Sinif",
-                                    "İmtahan",
-                                    "Düzgün",
-                                    "Ümumi Sual",
-                                    "Nəticə (%)",
-                                    "Tarix",
-                                ],
-                            )
-                            st.dataframe(df, use_container_width=True)
-                        else:
-                            st.info("Hələ heç bir imtahan nəticəsi yoxdur.")
-                except Exception as e:
-                    st.error(f"Nəticələr yüklənərkən xəta: {e}")
-                finally:
-                    conn.close()
 
         with m_t3:
             st.subheader("📝 Quiz Paketi və Sualların İdarə Edilməsi")
-            tab1, tab2 = st.tabs(["📦 Yeni Quiz Paketi Yarat", "➕ Paketə Sual Əlavə Et"])
+            tab1, tab2, tab_manage, tab_scores = st.tabs(
+                [
+                    "📦 Yeni Quiz Paketi Yarat",
+                    "➕ Paketə Sual Əlavə Et",
+                    "⚙️ Sualları İdarə Et",
+                    "📊 Şagird Nəticələri",
+                ]
+            )
 
-            # --- TAB 1: Yalnız Paket Yaratmaq Üçün ---
             # --- TAB 1: Yalnız Quiz Paketinin Yaradılması ---
-            with tab1:  # Və ya kodunuzda bu tabın adı nədirsə (məsələn: tab1)
+            with tab1:
                 st.subheader("Yeni Quiz Paketi Yarat")
 
                 with st.form(key="create_package_form", clear_on_submit=True):
@@ -845,7 +771,6 @@ else:
 
                             selected_pkg_id, selected_pkg_title = pkg_options[selected_pkg_label]
 
-                            # Tək formalı funksiyanı çağırırıq:
                             render_add_question_form(selected_pkg_id, selected_pkg_title)
 
                         else:
@@ -857,90 +782,79 @@ else:
                     finally:
                         conn.close()
 
-            # 1. Müəllim panelində mövcud paketləri bazadan çəkirik
-            conn = get_db_connection()
-            pkg_list = []
-            if conn:
-                try:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "SELECT id, title, class_level FROM quiz_packages ORDER BY id DESC"
-                        )
-                        pkg_list = cur.fetchall()
-                except Exception as e:
-                    st.error(f"Paketlər yüklənərkən xəta: {e}")
-                finally:
-                    conn.close()
+            with tab_manage:
+                st.subheader("Mövcud Sualların Redaktəsi və Silinməsi")
+                conn = get_db_connection()
+                if conn:
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "SELECT id, question_text, quiz_title FROM quizzes ORDER BY id DESC"
+                            )
+                            all_q = cur.fetchall()
 
-            if not pkg_list:
-                st.warning("Hələ heç bir quiz paketi yaradılmayıb. Əvvəlcə paket yaradın.")
-            else:
-                # 2. Seçim qutusunu qururuq
-                pkg_options = {f"{p[1]} ({p[2]}-ci sinif)": p[0] for p in pkg_list}
-                pkg_titles_map = {p[0]: p[1] for p in pkg_list}
+                        if all_q:
+                            q_dict = {f"ID {q[0]}: {q[1][:40]}... ({q[2]})": q[0] for q in all_q}
+                            selected_q_label = st.selectbox("İdarə ediləcək sualı seçin:", list(q_dict.keys()))
+                            selected_q_id = q_dict[selected_q_label]
 
-                # Dəyişənlər burada təyin olunur (Unresolved reference xətası aradan qalxır)
-                selected_pkg_label = st.selectbox(
-                    "Sualların əlavə ediləcəyi paketi seçin:", list(pkg_options.keys())
-                )
-                selected_pkg_id = pkg_options[selected_pkg_label]
-                selected_pkg_title = pkg_titles_map[selected_pkg_id]
-
-                # 3. Sual daxil etmə formu
-                with st.form("add_question_form"):
-                    q_solution=st.text_area("Sualın həll yolu (izahı):", help="Şagird testi bitirdikdən sonra bu izahı görəcək. ",)
-                    q_text = st.text_area("Sualın mətni:")
-                    opt_a = st.text_input("A varianti:")
-                    opt_b = st.text_input("B varianti:")
-                    opt_c = st.text_input("C varianti:")
-                    opt_d = st.text_input("D varianti:")
-                    correct_opt = st.selectbox("Düzgün cavab:", ["A", "B", "C", "D"])
-
-                    submitted = st.form_submit_button("Sualı Əlavə Et")
-
-                    if submitted:
-                        if not q_text or not opt_a or not opt_b or not opt_c or not opt_d:
-                            st.error("Lütfən bütün xanaları doldurun!")
-                        else:
-                            conn = get_db_connection()
-                            if conn:
-                                try:
+                            col_del, col_edit = st.columns([1, 4])
+                            with col_del:
+                                if st.button("🗑️ Sualı Sil", type="primary"):
                                     with conn.cursor() as cur:
-                                        cur.execute(
-                                            """
-                                            INSERT INTO quizzes (
-                                                lesson_id, 
-                                                quiz_title, 
-                                                question_text, 
-                                                option_a, 
-                                                option_b, 
-                                                option_c, 
-                                                option_d, 
-                                                correct_option
-                                                solution
-                                            ) 
-                                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                            """,
-                                            (
-                                                selected_pkg_id,
-                                                selected_pkg_title,
-                                                q_text,
-                                                opt_a,
-                                                opt_b,
-                                                opt_c,
-                                                opt_d,
-                                                correct_opt,
-                                                q_solution, # Həll yolu dəyəri daxil edilir
-                                            ),
-                                        )
+                                        cur.execute("DELETE FROM quizzes WHERE id = %s", (selected_q_id,))
                                     conn.commit()
-                                    st.success("Sual uğurla əlavə olundu!")
-                                except Exception as e:
-                                    st.error(f"Sual əlavə olunarkən xəta: {e}")
-                                finally:
-                                    conn.close()
+                                    st.success("Sual bazadan silindi!")
+                                    st.rerun()
+                    except Exception as e:
+                        st.error(f"Xəta baş verdi: {e}")
+                    finally:
+                        conn.close()
+
+            with tab_scores:
+                st.subheader("🏆 Şagirdlərin İmtahan Nəticələri")
+                conn = get_db_connection()
+                if conn:
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                SELECT 
+                                    r.id, 
+                                    r.student_name, 
+                                    r.class_level, 
+                                    r.quiz_title, 
+                                    r.score, 
+                                    r.total_questions, 
+                                    r.percentage, 
+                                    r.created_at 
+                                FROM quiz_results r
+                                ORDER BY r.created_at DESC
+                            """)
+                            results = cur.fetchall()
+
+                            if results:
+                                import pandas as pd
+
+                                df = pd.DataFrame(
+                                    results,
+                                    columns=[
+                                        "ID",
+                                        "Şagird",
+                                        "Sinif",
+                                        "İmtahan",
+                                        "Düzgün",
+                                        "Ümumi Sual",
+                                        "Nəticə (%)",
+                                        "Tarix",
+                                    ],
+                                )
+                                st.dataframe(df, use_container_width=True)
                             else:
-                                st.warning("Bütün xanaları doldurun.")
+                                st.info("Hələ heç bir imtahan nəticəsi yoxdur.")
+                    except Exception as e:
+                        st.error(f"Nəticələr yüklənərkən xəta: {e}")
+                    finally:
+                        conn.close()
 
     # --------------------------------------
     # ŞAGİRD PANELİ
