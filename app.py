@@ -79,6 +79,87 @@ def check_quiz_lock_status(student_id, package_id):
             conn.close()
     return is_locked, time_left_str
 
+    def save_quiz_result(
+            student_id,
+            student_name,
+            student_class,
+            quiz_title,
+            correct_cnt,
+            total_q,
+            percentage_score,
+            selected_pkg_id,
+    ):
+        conn = get_db_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    # Əvvəl bu tələbənin bu paket üzrə nəticəsinin olub-olmadığını yoxlayırıq
+                    cur.execute(
+                        """
+                        SELECT id FROM quiz_results 
+                        WHERE student_id = %s AND package_id = %s
+                        """,
+                        (student_id, selected_pkg_id),
+                    )
+                    existing_result = cur.fetchone()
+
+                    if existing_result:
+                        # Nəticə varsa, UPDATE edirik
+                        cur.execute(
+                            """
+                            UPDATE quiz_results 
+                            SET score = %s,
+                                total_questions = %s,
+                                percentage = %s,
+                                quiz_title = %s,
+                                created_at = CURRENT_TIMESTAMP
+                            WHERE id = %s
+                            """,
+                            (
+                                correct_cnt,
+                                total_q,
+                                percentage_score,
+                                quiz_title,
+                                existing_result[0],
+                            ),
+                        )
+                    else:
+                        # Nəticə yoxdursa, INSERT edirik
+                        cur.execute(
+                            """
+                            INSERT INTO quiz_results (
+                                student_id,
+                                student_name,
+                                class_level,
+                                quiz_title,
+                                score,
+                                total_questions,
+                                percentage,
+                                package_id,
+                                created_at
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                            """,
+                            (
+                                student_id,
+                                student_name,
+                                student_class,
+                                quiz_title,
+                                correct_cnt,
+                                total_q,
+                                percentage_score,
+                                selected_pkg_id,
+                            ),
+                        )
+                conn.commit()
+                return True
+            except Exception as e:
+                st.error(f"Nəticə bazaya yazılarkən xəta: {e}")
+                return False
+            finally:
+                conn.close()
+        return False
+
     # Nəticəyə uyğun Emosiya və Animasiya
     if score_percent >= 90:
         st.balloons()  # Yalnız 90-100% üçün konfeti/şar animasiyası
@@ -290,6 +371,11 @@ def hash_password(password):
 # ==========================================
 # GİRİŞ VƏ QEYDİYYAT SƏHİFƏSİ
 # ==========================================
+def save_quiz_result(student_id, student_name, student_class, quiz_title, correct_cnt, total_q, percentage_score,
+                     selected_pkg_id):
+    pass
+
+
 if st.session_state.user is None:
     st.markdown(
         "<h1 style='text-align: center;'>🎓 ClassLevel LMS</h1>",
@@ -548,6 +634,71 @@ else:
                         st.info("Hələ ki heç bir material əlavə olunmayıb.")
                 except Exception as e:
                     st.error(f"Xəta: {e}")
+                finally:
+                    conn.close()
+        # Müəllim paneli üçün tab-lar
+        tab_add, tab_manage, tab_scores = st.tabs(
+            ["➕ Yeni Sual Əlavə Et", "⚙️ Sualları İdarə Et", "📊 Şagird Nəticələri"]
+        )
+
+        with tab_manage:
+            st.subheader("Mövcud Sualların Redaktəsi və Silinməsi")
+            conn = get_db_connection()
+            if conn:
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT id, question_text, quiz_title FROM quizzes ORDER BY id DESC"
+                        )
+                        all_q = cur.fetchall()
+
+                    if all_q:
+                        q_dict = {f"ID {q[0]}: {q[1][:40]}... ({q[2]})": q[0] for q in all_q}
+                        selected_q_label = st.selectbox("İdarə ediləcək sualı seçin:", list(q_dict.keys()))
+                        selected_q_id = q_dict[selected_q_label]
+
+                        col_del, col_edit = st.columns([1, 4])
+                        with col_del:
+                            if st.button("🗑️ Sualı Sil", type="primary"):
+                                with conn.cursor() as cur:
+                                    cur.execute("DELETE FROM quizzes WHERE id = %s", (selected_q_id,))
+                                conn.commit()
+                                st.success("Sual bazadan silindi!")
+                                st.rerun()
+                except Exception as e:
+                    st.error(f"Xəta baş verdi: {e}")
+                finally:
+                    conn.close()
+
+        with tab_scores:
+            st.subheader("🏆 Şagirdlərin İmtahan Nəticələri")
+            conn = get_db_connection()
+            if conn:
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            SELECT r.id, u.username, r.quiz_title, r.score_percentage, r.created_at 
+                            FROM quiz_results r
+                            JOIN users u ON r.user_id = u.id
+                            ORDER BY r.created_at DESC
+                        """)
+                        results = cur.fetchall()
+                        if results:
+                            st.dataframe(
+                                results,
+                                column_config={
+                                    "0": "ID",
+                                    "1": "Şagird",
+                                    "2": "İmtahan",
+                                    "3": "Nəticə (%)",
+                                    "4": "Tarix",
+                                },
+                                use_container_width=True,
+                            )
+                        else:
+                            st.info("Hələ heç bir imtahan nəticəsi yoxdur.")
+                except Exception as e:
+                    st.error(f"Nəticələr yüklənərkən xəta: {e}")
                 finally:
                     conn.close()
 
@@ -986,33 +1137,16 @@ else:
                                             )
 
                                             # B) Yeni nəticəni yazırıq
-                                            cur.execute(
-                                                """
-                                                INSERT INTO quiz_results (
-                                                    student_id, 
-                                                    student_name, 
-                                                    class_level, 
-                                                    quiz_title, 
-                                                    score, 
-                                                    total_questions, 
-                                                    percentage, 
-                                                    package_id,
-                                                    created_at
-                                                ) 
-                                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
-                                            """,
-                                                (
-                                                    student_id,
-                                                    student_name,
-                                                    student_class,
-                                                    quiz_title,
-                                                    correct_cnt,
-                                                    total_q,
-                                                    percentage_score,
-                                                    selected_pkg_id,
-                                                ),
+                                            save_quiz_result(
+                                                student_id,
+                                                student_name,
+                                                student_class,
+                                                quiz_title,
+                                                correct_cnt,
+                                                total_q,
+                                                percentage_score,
+                                                selected_pkg_id,
                                             )
-                                        conn.commit()
                                     except Exception as e:
                                         st.error(
                                             f"Nəticə yadda saxlanılarkən xəta: {e}"
